@@ -1,0 +1,33 @@
+{
+  "id": "vintage_electric_kettle",
+  "name": "Vintage Electric Kettle",
+  "file": "vintage_electric_kettle.gltf",
+  "thumb": "thumb.png",
+  "category": "electronics",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "old",
+    "vintage",
+    "antique",
+    "electric",
+    "gooseneck spout",
+    "metal",
+    "rusted",
+    "dirty",
+    "traditional"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 14838,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "SV Garip",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/vintage_electric_kettle",
+    "credit_required": false
+  }
+}

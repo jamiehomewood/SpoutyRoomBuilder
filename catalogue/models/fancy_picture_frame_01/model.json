@@ -1,0 +1,34 @@
+{
+  "id": "fancy_picture_frame_01",
+  "name": "Fancy Picture Frame 01",
+  "file": "fancy_picture_frame_01.gltf",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "art",
+    "vintage",
+    "old",
+    "dutch",
+    "painting",
+    "oil",
+    "antique",
+    "fancy",
+    "frame",
+    "picture"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 938,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rob Tuytel, Rico Cilliers",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/fancy_picture_frame_01",
+    "credit_required": false
+  }
+}

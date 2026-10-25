@@ -1,0 +1,30 @@
+{
+  "id": "round_spectacles",
+  "name": "Round Spectacles",
+  "file": "round_spectacles.gltf",
+  "thumb": "thumb.png",
+  "category": "misc",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "vintage",
+    "round frame",
+    "retro",
+    "eyewear",
+    "accessories",
+    "glasses"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 11810,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Sean Buckley",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/round_spectacles",
+    "credit_required": false
+  }
+}

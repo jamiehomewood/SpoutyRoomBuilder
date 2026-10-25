@@ -1,0 +1,35 @@
+{
+  "id": "painted_wooden_cabinet",
+  "name": "Painted Wooden Cabinet",
+  "file": "painted_wooden_cabinet.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "old",
+    "worn",
+    "antique",
+    "wooden",
+    "vintage",
+    "colonial",
+    "farmhouse",
+    "storage",
+    "aged",
+    "rustic",
+    "weathered"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 2227,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Kirill Sannikov",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/painted_wooden_cabinet",
+    "credit_required": false
+  }
+}

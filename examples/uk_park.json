@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "name": "UK park (test)",
+  "room": {
+    "preset": "igloo-main",
+    "width": 6.4,
+    "depth": 5.71,
+    "height": 2.244,
+    "eye": 1.12,
+    "projected": {
+      "walls": true,
+      "floor": true,
+      "ceiling": false
+    },
+    "type": "outdoor"
+  },
+  "style": "outdoor",
+  "lighting": "day",
+  "outside": {
+    "view": "park",
+    "rotation": 90
+  },
+  "features": [],
+  "items": [
+    {
+      "id": "bench",
+      "model": "rb_park_bench",
+      "x": -1.1,
+      "y": 3.9,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "bin",
+      "model": "rb_litter_bin",
+      "x": 0.25,
+      "y": 3.95,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "dogbin",
+      "model": "rb_dog_bin",
+      "x": 3.7,
+      "y": 1.0,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "lamp",
+      "model": "street_lamp_01",
+      "x": -3.7,
+      "y": -1.6,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "sign",
+      "model": "rb_park_sign",
+      "x": 2.1,
+      "y": -3.9,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    }
+  ],
+  "views": [
+    {
+      "name": "centre",
+      "x": 0,
+      "y": 0,
+      "yaw": 0
+    }
+  ],
+  "render": {
+    "quality": "standard"
+  }
+}

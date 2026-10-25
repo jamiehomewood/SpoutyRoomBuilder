@@ -1,0 +1,35 @@
+{
+  "id": "modern_ceiling_lamp_01",
+  "name": "Modern Ceiling Lamp 01",
+  "file": "modern_ceiling_lamp_01.gltf",
+  "thumb": "thumb.png",
+  "category": "lighting",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "lighting",
+    "light",
+    "modern",
+    "glass",
+    "round",
+    "hanging",
+    "hanging lamp",
+    "ceiling lamp",
+    "decorative lighting",
+    "modern decor",
+    "interior design"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 5602,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/modern_ceiling_lamp_01",
+    "credit_required": false
+  }
+}

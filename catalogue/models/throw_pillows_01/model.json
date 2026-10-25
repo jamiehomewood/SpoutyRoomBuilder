@@ -1,0 +1,33 @@
+{
+  "id": "throw_pillows_01",
+  "name": "Throw Pillows 01",
+  "file": "throw_pillows_01.gltf",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "decorative",
+    "pillow",
+    "throw",
+    "pattern",
+    "african",
+    "red",
+    "triangle",
+    "orange"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 6362,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Serhii Khromov",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/throw_pillows_01",
+    "credit_required": false
+  }
+}

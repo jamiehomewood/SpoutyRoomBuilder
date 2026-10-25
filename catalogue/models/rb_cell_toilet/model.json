@@ -1,0 +1,28 @@
+{
+  "id": "rb_cell_toilet",
+  "name": "Cell toilet and modesty wall",
+  "file": "rb_cell_toilet.glb",
+  "thumb": "thumb.png",
+  "category": "custody",
+  "styles": [
+    "custody"
+  ],
+  "tags": [
+    "custody",
+    "cell",
+    "police",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Stainless steel toilet, no seat, flush plate, low modesty wall on one side. Back against the wall.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

@@ -1,0 +1,19 @@
+# Settings with your Sketchfab token: never commit
+config.json
+
+# Made by renders / big downloads (kept on the PC only)
+library/
+jobs/
+textures/hdri/
+_to_delete/
+rooms/*.json
+
+# Model files (re-made or re-imported: see README "Setting up from the repo")
+catalogue/models/**/*.glb
+catalogue/models/**/*.gltf
+catalogue/models/**/*.bin
+catalogue/models/*/textures/
+
+__pycache__/
+*.pyc
+*.blend1

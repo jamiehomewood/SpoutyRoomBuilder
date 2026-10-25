@@ -1,0 +1,31 @@
+{
+  "id": "modern_coffee_table_02",
+  "name": "Modern Coffee Table 02",
+  "file": "modern_coffee_table_02.gltf",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "contemporary",
+    "modern",
+    "rectangular",
+    "stone",
+    "wood",
+    "deco",
+    "clean"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 13645,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Amin",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/modern_coffee_table_02",
+    "credit_required": false
+  }
+}

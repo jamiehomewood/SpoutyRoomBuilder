@@ -1,0 +1,28 @@
+{
+  "id": "rb_bay_curtain",
+  "name": "Bay curtain (pulled back)",
+  "file": "rb_bay_curtain.glb",
+  "thumb": "thumb.png",
+  "category": "medical",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "2.6 m ceiling track with the curtain gathered at one end. Place at z 0.3 so the track sits near a 2.2 m ceiling.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

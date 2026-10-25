@@ -1,0 +1,27 @@
+{
+  "id": "rb_dog_bin",
+  "name": "Dog-waste bin",
+  "file": "rb_dog_bin.glb",
+  "thumb": "thumb.png",
+  "category": "outdoor",
+  "styles": [
+    "outdoor"
+  ],
+  "tags": [
+    "park",
+    "bin",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Red dog-waste bin on a post. Opening faces -Y.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

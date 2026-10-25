@@ -1,0 +1,28 @@
+{
+  "id": "rb_linen_trolley",
+  "name": "Linen trolley",
+  "file": "rb_linen_trolley.glb",
+  "thumb": "thumb.png",
+  "category": "medical",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Ward linen skip on castors.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

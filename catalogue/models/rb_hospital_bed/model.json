@@ -1,0 +1,28 @@
+{
+  "id": "rb_hospital_bed",
+  "name": "Hospital bed",
+  "file": "rb_hospital_bed.glb",
+  "thumb": "thumb.png",
+  "category": "beds",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Profiling hospital bed, back raised, made up with sheet, pillow and folded cellular blanket. Head end at +Y (against the wall). 2.15 x 1.0 m.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

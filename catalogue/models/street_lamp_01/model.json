@@ -1,0 +1,35 @@
+{
+  "id": "street_lamp_01",
+  "name": "Street Lamp 01",
+  "file": "street_lamp_01.gltf",
+  "thumb": "thumb.png",
+  "category": "lighting",
+  "styles": [
+    "outdoor",
+    "modern"
+  ],
+  "tags": [
+    "street",
+    "road",
+    "light",
+    "lamppost",
+    "outdoor",
+    "pole",
+    "sidewalk",
+    "night",
+    " urban",
+    "city"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 30610,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Josh Dean",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/street_lamp_01",
+    "credit_required": false
+  }
+}

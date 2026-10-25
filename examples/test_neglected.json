@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "name": "Test - neglected, small room",
+  "room": {
+    "preset": "custom",
+    "width": 5.0,
+    "depth": 4.2,
+    "height": 2.4,
+    "eye": 1.12,
+    "projected": {
+      "walls": true,
+      "floor": true,
+      "ceiling": false
+    }
+  },
+  "style": "neglected",
+  "lighting": "dusk",
+  "features": [
+    {
+      "id": "books",
+      "type": "alcove",
+      "wall": "north",
+      "pos": -1.2,
+      "width": 1.2,
+      "depth": 0.4,
+      "shelves": 4
+    },
+    {
+      "id": "low-alcove",
+      "type": "alcove",
+      "wall": "north",
+      "pos": 1.1,
+      "width": 1.6,
+      "depth": 0.7,
+      "height": 2.0
+    },
+    {
+      "id": "kitchenette",
+      "type": "kitchenette",
+      "wall": "east",
+      "pos": 0.3,
+      "width": 2.6,
+      "depth": 0.65
+    },
+    {
+      "id": "window",
+      "type": "window",
+      "wall": "south",
+      "pos": 0.8,
+      "width": 1.4,
+      "sill": 0.85,
+      "height": 1.15
+    },
+    {
+      "id": "door",
+      "type": "door",
+      "wall": "west",
+      "pos": -1.2,
+      "width": 0.82,
+      "height": 2.0,
+      "beyond": "corridor"
+    },
+    {
+      "id": "arch",
+      "type": "arch",
+      "wall": "west",
+      "pos": 0.9,
+      "width": 1.4,
+      "height": 2.05,
+      "shape": "square",
+      "room": {
+        "type": "recess",
+        "depth": 1.2
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "chair",
+      "model": "ArmChair_01",
+      "x": 1.1,
+      "y": 2.35,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "cabinet",
+      "model": "vintage_cabinet_01",
+      "x": -2.85,
+      "y": 0.9,
+      "z": 0,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "bag",
+      "model": "trashbag",
+      "x": -1.8,
+      "y": -1.7,
+      "z": 0,
+      "rot": 30,
+      "scale": 1
+    }
+  ],
+  "views": [
+    {
+      "name": "centre",
+      "x": 0,
+      "y": 0,
+      "yaw": 0
+    }
+  ],
+  "render": {
+    "quality": "draft"
+  },
+  "outside": {
+    "view": "street",
+    "rotation": 0
+  }
+}

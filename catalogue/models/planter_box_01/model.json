@@ -1,0 +1,38 @@
+{
+  "id": "planter_box_01",
+  "name": "Planter Box 01",
+  "file": "planter_box_01.gltf",
+  "thumb": "thumb.png",
+  "category": "plants",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "old",
+    "wooden",
+    "wood",
+    "farmhouse",
+    "shed",
+    "outdoor",
+    "gardening",
+    "greenhouse",
+    "landscaping",
+    "garden",
+    "farm",
+    "planter",
+    "flower box",
+    "planters"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 8094,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/planter_box_01",
+    "credit_required": false
+  }
+}

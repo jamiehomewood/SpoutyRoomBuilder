@@ -1,0 +1,37 @@
+{
+  "id": "trashbag",
+  "name": "Trashbag",
+  "file": "trashbag.gltf",
+  "thumb": "thumb.png",
+  "category": "clutter",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "garbage bag",
+    "refuse",
+    "street waste",
+    "trash",
+    "street",
+    "scrapyard",
+    "junkyard",
+    "garbage",
+    "bin",
+    "dumpster",
+    "disposal",
+    "litter",
+    "rubbish"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 4482,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Benny Weimer",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/trashbag",
+    "credit_required": false
+  }
+}

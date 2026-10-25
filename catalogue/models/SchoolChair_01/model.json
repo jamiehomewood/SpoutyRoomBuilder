@@ -1,0 +1,31 @@
+{
+  "id": "SchoolChair_01",
+  "name": "School Chair 01",
+  "file": "SchoolChair_01.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "prop",
+    "furniture",
+    "metal",
+    "plastic",
+    "chair",
+    "school"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 5072,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Ethan Place",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/SchoolChair_01",
+    "credit_required": false
+  }
+}

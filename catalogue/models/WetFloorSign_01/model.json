@@ -1,0 +1,36 @@
+{
+  "id": "WetFloorSign_01",
+  "name": "Wet Floor Sign 01",
+  "file": "WetFloorSign_01.gltf",
+  "thumb": "thumb.png",
+  "category": "misc",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "prop",
+    "plastic",
+    "sign",
+    "safety",
+    "caution",
+    "warning",
+    "yellow",
+    "hazard",
+    "slippery",
+    "slippery when wet",
+    "utility"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 228,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Fran Calvente",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/WetFloorSign_01",
+    "credit_required": false
+  }
+}

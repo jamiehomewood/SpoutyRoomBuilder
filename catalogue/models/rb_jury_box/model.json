@@ -1,0 +1,27 @@
+{
+  "id": "rb_jury_box",
+  "name": "Jury box (12 seats)",
+  "file": "rb_jury_box.glb",
+  "thumb": "thumb.png",
+  "category": "court",
+  "styles": [
+    "court"
+  ],
+  "tags": [
+    "court",
+    "jury",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Two tiers of six upholstered seats behind a panelled front. 3.6 x 1.9 m. Faces -Y.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

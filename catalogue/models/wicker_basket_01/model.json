@@ -1,0 +1,36 @@
+{
+  "id": "wicker_basket_01",
+  "name": "Wicker Basket 01",
+  "file": "wicker_basket_01.gltf",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "wood",
+    "wicker",
+    "twine",
+    "basket",
+    "picnic",
+    "outdoor",
+    "kitchen",
+    "dining",
+    "table",
+    "shed",
+    "farm"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 22276,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Kuutti Siitonen",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wicker_basket_01",
+    "credit_required": false
+  }
+}

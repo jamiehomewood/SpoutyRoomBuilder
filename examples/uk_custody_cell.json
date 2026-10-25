@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "UK police custody cell",
+  "room": {
+    "preset": "custom",
+    "width": 2.6,
+    "depth": 3.4,
+    "height": 2.6,
+    "eye": 1.12,
+    "projected": {
+      "walls": true,
+      "floor": true,
+      "ceiling": false
+    }
+  },
+  "style": "custody",
+  "lighting": "day",
+  "outside": {
+    "view": "estate",
+    "rotation": 0
+  },
+  "features": [
+    {
+      "id": "plinth-recess",
+      "type": "alcove",
+      "wall": "west",
+      "pos": 0.45,
+      "width": 2.5,
+      "depth": 0.72
+    },
+    {
+      "id": "north-wall-back",
+      "type": "alcove",
+      "wall": "north",
+      "pos": 0.0,
+      "width": 2.6,
+      "depth": 1.05
+    },
+    {
+      "id": "cell-door",
+      "type": "door",
+      "wall": "south",
+      "pos": -0.3,
+      "width": 0.9,
+      "height": 2.05,
+      "beyond": "closed"
+    },
+    {
+      "id": "high-window",
+      "type": "window",
+      "wall": "east",
+      "pos": 0.5,
+      "width": 0.9,
+      "sill": 1.9,
+      "height": 0.45,
+      "dressing": "frosted"
+    }
+  ],
+  "items": [
+    {
+      "id": "plinth",
+      "model": "rb_cell_bench",
+      "x": -1.66,
+      "y": 0.3,
+      "z": 0,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "toilet",
+      "model": "rb_cell_toilet",
+      "x": 0.95,
+      "y": 2.35,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "cctv",
+      "model": "rb_cctv_dome",
+      "x": 1.1,
+      "y": -1.45,
+      "z": 2.48,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "call",
+      "model": "rb_cell_call_point",
+      "x": 0.45,
+      "y": -1.688,
+      "z": 1.1,
+      "rot": 180,
+      "scale": 1
+    }
+  ],
+  "views": [
+    {
+      "name": "centre",
+      "x": 0,
+      "y": 0,
+      "yaw": 0
+    }
+  ],
+  "render": {
+    "quality": "standard"
+  }
+}

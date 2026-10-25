@@ -1,0 +1,27 @@
+{
+  "id": "rb_judge_bench",
+  "name": "Judge's bench (UK court)",
+  "file": "rb_judge_bench.glb",
+  "thumb": "thumb.png",
+  "category": "court",
+  "styles": [
+    "court"
+  ],
+  "tags": [
+    "court",
+    "judge",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Carpeted dais, panelled oak bench, three high-back chairs, tall back panel with a plain roundel. 3.6 x 2.0 m, 2.2 m tall. Front faces -Y.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

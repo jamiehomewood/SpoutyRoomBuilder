@@ -1,0 +1,33 @@
+{
+  "id": "potted_plant_02",
+  "name": "Potted Plant 02",
+  "file": "potted_plant_02.gltf",
+  "thumb": "thumb.png",
+  "category": "plants",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "potplant",
+    "plant",
+    "pot",
+    "vase",
+    "medium",
+    "leaf",
+    "green",
+    "terracotta"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 69806,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rico Cilliers",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/potted_plant_02",
+    "credit_required": false
+  }
+}

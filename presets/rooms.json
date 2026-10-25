@@ -1,0 +1,14 @@
+{
+  "_note": "Physical rooms the builder can start from. Sizes in metres: width runs west-east (x), depth runs south-north (y). Add the other rooms here once measured, or save custom sizes from the builder.",
+  "rooms": [
+    {
+      "id": "igloo-main",
+      "name": "Igloo room (Glenda)",
+      "width": 6.40,
+      "depth": 5.71,
+      "height": 2.244,
+      "eye": 1.12,
+      "projected": { "walls": true, "floor": true, "ceiling": false }
+    }
+  ]
+}

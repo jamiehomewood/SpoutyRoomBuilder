@@ -1,0 +1,28 @@
+{
+  "id": "rb_bedside_locker",
+  "name": "Bedside locker",
+  "file": "rb_bedside_locker.glb",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Ward bedside cabinet on castors with water jug and cup.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "name": "UK court room (test)",
+  "room": {
+    "preset": "igloo-main",
+    "width": 6.4,
+    "depth": 5.71,
+    "height": 2.244,
+    "eye": 1.12,
+    "projected": {
+      "walls": true,
+      "floor": true,
+      "ceiling": false
+    }
+  },
+  "style": "court",
+  "lighting": "day",
+  "outside": {
+    "view": "town_street",
+    "rotation": 0
+  },
+  "features": [
+    {
+      "id": "bench-alcove",
+      "type": "alcove",
+      "wall": "north",
+      "pos": 0.0,
+      "width": 4.0,
+      "depth": 3.4
+    },
+    {
+      "id": "jury-alcove",
+      "type": "alcove",
+      "wall": "east",
+      "pos": 0.3,
+      "width": 3.9,
+      "depth": 2.0
+    },
+    {
+      "id": "witness-alcove",
+      "type": "alcove",
+      "wall": "west",
+      "pos": 1.4,
+      "width": 1.6,
+      "depth": 1.6
+    },
+    {
+      "id": "judges-door",
+      "type": "door",
+      "wall": "west",
+      "pos": -1.4,
+      "width": 0.9,
+      "height": 2.05,
+      "beyond": "corridor"
+    },
+    {
+      "id": "dock-alcove",
+      "type": "alcove",
+      "wall": "south",
+      "pos": 0.9,
+      "width": 3.4,
+      "depth": 1.85
+    },
+    {
+      "id": "public-door",
+      "type": "door",
+      "wall": "south",
+      "pos": -2.2,
+      "width": 1.0,
+      "height": 2.05,
+      "beyond": "corridor"
+    }
+  ],
+  "items": [
+    {
+      "id": "judge",
+      "model": "rb_judge_bench",
+      "x": 0.0,
+      "y": 5.235,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "clerk",
+      "model": "rb_clerk_desk",
+      "x": 0.0,
+      "y": 3.545,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "jury",
+      "model": "rb_jury_box",
+      "x": 4.22,
+      "y": 0.3,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "witness",
+      "model": "rb_witness_box",
+      "x": -4.08,
+      "y": 1.4,
+      "z": 0,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "dock",
+      "model": "rb_secure_dock",
+      "x": 0.9,
+      "y": -3.825,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    }
+  ],
+  "views": [
+    {
+      "name": "centre",
+      "x": 0,
+      "y": 0,
+      "yaw": 0
+    },
+    {
+      "name": "witness",
+      "x": -4.05,
+      "y": 1.4,
+      "z": 1.62,
+      "yaw": 90
+    }
+  ],
+  "render": {
+    "quality": "standard"
+  }
+}

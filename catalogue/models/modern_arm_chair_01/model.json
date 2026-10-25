@@ -1,0 +1,32 @@
+{
+  "id": "modern_arm_chair_01",
+  "name": "Modern Arm Chair 01",
+  "file": "modern_arm_chair_01.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "wood",
+    "leather",
+    "fancy",
+    "modern",
+    "chair",
+    "contemporary",
+    "wooden",
+    "lounge"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 8916,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Vibrant Nordic",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/modern_arm_chair_01",
+    "credit_required": false
+  }
+}

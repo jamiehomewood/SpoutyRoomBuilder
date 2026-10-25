@@ -1,0 +1,36 @@
+{
+  "id": "side_table_01",
+  "name": "Side Table 01",
+  "file": "side_table_01.gltf",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "table",
+    "wood",
+    "minimalist",
+    "modern",
+    "decor",
+    "living room",
+    "bedroom",
+    "shelf",
+    "contemporary",
+    "interior",
+    "home",
+    "wooden"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 2756,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/side_table_01",
+    "credit_required": false
+  }
+}

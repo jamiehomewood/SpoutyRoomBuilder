@@ -1,0 +1,31 @@
+{
+  "id": "wooden_bowl_01",
+  "name": "Wooden Bowl 01",
+  "file": "wooden_bowl_01.gltf",
+  "thumb": "thumb.png",
+  "category": "kitchen",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "bowl",
+    "wooden",
+    "carved",
+    "fruit",
+    "fruitbowl",
+    "decoration"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 14122,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Oliver Harries",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wooden_bowl_01",
+    "credit_required": false
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "vintage_microwave",
+  "name": "Vintage Microwave",
+  "file": "vintage_microwave.gltf",
+  "thumb": "thumb.png",
+  "category": "electronics",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "vintage",
+    "retro",
+    "wooden",
+    "70s",
+    "oven",
+    "analog"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 8120,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Adam Nekola",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/vintage_microwave",
+    "credit_required": false
+  }
+}

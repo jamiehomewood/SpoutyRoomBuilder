@@ -1,0 +1,32 @@
+{
+  "id": "coffee_table_round_01",
+  "name": "Coffee Table Round 01",
+  "file": "coffee_table_round_01.gltf",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "modern",
+    "marble",
+    "tea",
+    "coffee",
+    "metal",
+    "sleek",
+    "contemporary",
+    "cocktail"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 4044,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Ulan Cabanilla",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/coffee_table_round_01",
+    "credit_required": false
+  }
+}

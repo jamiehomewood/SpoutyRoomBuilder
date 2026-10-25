@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Room Builder - live 360</title>
+<style>html, body { margin: 0; height: 100%; background: #000; overflow: hidden; } canvas { width: 100%; height: 100%; display: block; }
+#msg { position: absolute; left: 12px; bottom: 10px; color: #aaa; font: 13px system-ui, sans-serif; }</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg">Waiting for the builder…</div>
+<script type="module">
+// The room being edited in the builder, as an equirectangular 360 image filling the window.
+// Give this page to Spouty (4096 x 2048) or an Igloo web layer set to 360 / equirectangular.
+// ?view=<name> uses another view point; ?msg=0 hides the status line.
+import * as THREE from 'three';
+import { buildRoom, makeItem, lightRoom, roomFrame, b2t, EquirectRenderer, outsideSphere } from './scene.js';
+
+const params = new URLSearchParams(location.search);
+const canvas = document.getElementById('c'), msg = document.getElementById('msg');
+if (params.get('msg') === '0') msg.hidden = true;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const eq = new EquirectRenderer(renderer, 1024);
+const scene = new THREE.Scene();
+let spec = null, rev = -1, cat = [], dirty = true, outsideCfg = null;
+const holder = new THREE.Group(); scene.add(holder);
+
+function resize() { renderer.setSize(innerWidth, innerHeight, false); dirty = true; }
+addEventListener('resize', resize); resize();
+
+let gen = 0;
+async function rebuild() {
+  const my = ++gen;
+  holder.clear(); scene.children.filter(c => c.name === 'lights').forEach(c => scene.remove(c));
+  if (!spec) return;
+  const b = buildRoom(spec); holder.add(b.root);
+  lightRoom(scene, spec);
+  if (!outsideCfg) { try { outsideCfg = await (await fetch('/api/outside')).json(); } catch { outsideCfg = { views: [] }; } }
+  if (my !== gen) return;
+  holder.add(outsideSphere(spec, outsideCfg, () => { dirty = true; }));
+  scene.background = new THREE.Color(spec.style === 'neglected' ? 0x080706 : 0x0a0a0a);
+  const pending = (spec.items || []).map(async it => {
+    const meta = cat.find(m => m.id === it.model);
+    const g = await makeItem(it, meta); if (my !== gen) return; holder.add(g); dirty = true;
+  });
+  dirty = true;
+  await Promise.all(pending);
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`/api/live?rev=${rev}`); const j = await r.json();
+    if (j.rev !== rev) {
+      rev = j.rev; spec = j.spec;
+      if (spec && (spec.items || []).some(it => !cat.find(m => m.id === it.model))) cat = await (await fetch('/api/catalogue')).json();
+      msg.textContent = spec ? `${spec.name} · ${spec.style} · live layout (the real render has full lighting and materials)` : 'Waiting for the builder…';
+      rebuild();
+    }
+  } catch (e) { msg.textContent = 'Room Builder server not reachable'; await new Promise(r => setTimeout(r, 2000)); }
+  poll();
+}
+
+let lastDraw = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!spec) { renderer.clear(); return; }
+  // the layout only changes when the builder sends an edit (or a model finishes loading): no need for 60 fps
+  if (!dirty && t - lastDraw < 1000) return;
+  dirty = false; lastDraw = t;
+  const want = params.get('view');
+  const v = (spec.views || []).find(x => x.name === want) || (spec.views || [])[0] || { x: 0, y: 0, yaw: 0 };
+  const F = roomFrame(spec);
+  eq.render(scene, b2t(+v.x, +v.y, +(v.z ?? F.eye)), +v.yaw || 0);
+}
+(async () => { try { cat = await (await fetch('/api/catalogue')).json(); } catch { } poll(); requestAnimationFrame(frame); })();
+</script>
+</body>
+</html>

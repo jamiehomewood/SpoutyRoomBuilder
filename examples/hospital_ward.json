@@ -1,0 +1,309 @@
+{
+  "version": 1,
+  "name": "Hospital ward - 4 bed bays",
+  "room": {
+    "preset": "igloo-main",
+    "width": 6.4,
+    "depth": 5.71,
+    "height": 2.244,
+    "eye": 1.12,
+    "projected": {
+      "walls": true,
+      "floor": true,
+      "ceiling": false
+    }
+  },
+  "style": "hospital",
+  "lighting": "day",
+  "features": [
+    {
+      "id": "bay-w1",
+      "type": "alcove",
+      "wall": "west",
+      "pos": -1.43,
+      "width": 2.7,
+      "depth": 2.4
+    },
+    {
+      "id": "bay-w2",
+      "type": "alcove",
+      "wall": "west",
+      "pos": 1.43,
+      "width": 2.7,
+      "depth": 2.4
+    },
+    {
+      "id": "bay-e1",
+      "type": "alcove",
+      "wall": "east",
+      "pos": -1.43,
+      "width": 2.7,
+      "depth": 2.4
+    },
+    {
+      "id": "bay-e2",
+      "type": "alcove",
+      "wall": "east",
+      "pos": 1.43,
+      "width": 2.7,
+      "depth": 2.4
+    },
+    {
+      "id": "window-nw",
+      "type": "window",
+      "wall": "north",
+      "pos": -1.6,
+      "width": 1.5,
+      "sill": 0.8,
+      "height": 1.2
+    },
+    {
+      "id": "window-ne",
+      "type": "window",
+      "wall": "north",
+      "pos": 1.6,
+      "width": 1.5,
+      "sill": 0.8,
+      "height": 1.2
+    },
+    {
+      "id": "ward-door",
+      "type": "door",
+      "wall": "south",
+      "pos": 0.0,
+      "width": 1.2,
+      "height": 2.05,
+      "beyond": "corridor"
+    }
+  ],
+  "items": [
+    {
+      "id": "rb_hospital_bed-0",
+      "model": "rb_hospital_bed",
+      "x": -4.425,
+      "y": -1.53,
+      "z": 0,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_bedside_locker-0",
+      "model": "rb_bedside_locker",
+      "x": -5.3,
+      "y": -0.73,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_ward_chair-0",
+      "model": "rb_ward_chair",
+      "x": -4.1,
+      "y": -2.4,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    },
+    {
+      "id": "rb_bay_curtain-0",
+      "model": "rb_bay_curtain",
+      "x": -3.32,
+      "y": -1.43,
+      "z": 0.3,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_overbed_table-0",
+      "model": "rb_overbed_table",
+      "x": -3.8,
+      "y": -1.26,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "rb_hospital_bed-1",
+      "model": "rb_hospital_bed",
+      "x": -4.425,
+      "y": 1.33,
+      "z": 0,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_bedside_locker-1",
+      "model": "rb_bedside_locker",
+      "x": -5.3,
+      "y": 2.13,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_ward_chair-1",
+      "model": "rb_ward_chair",
+      "x": -4.1,
+      "y": 0.46,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    },
+    {
+      "id": "rb_bay_curtain-1",
+      "model": "rb_bay_curtain",
+      "x": -3.32,
+      "y": 1.43,
+      "z": 0.3,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_drip_stand-1",
+      "model": "rb_drip_stand",
+      "x": -4.2,
+      "y": 2.18,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_hospital_bed-2",
+      "model": "rb_hospital_bed",
+      "x": 4.425,
+      "y": -1.53,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "rb_bedside_locker-2",
+      "model": "rb_bedside_locker",
+      "x": 5.3,
+      "y": -0.73,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_ward_chair-2",
+      "model": "rb_ward_chair",
+      "x": 4.1,
+      "y": -2.4,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    },
+    {
+      "id": "rb_bay_curtain-2",
+      "model": "rb_bay_curtain",
+      "x": 3.32,
+      "y": -1.43,
+      "z": 0.3,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_obs_monitor-2",
+      "model": "rb_obs_monitor",
+      "x": 4.35,
+      "y": -0.65,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_hospital_bed-3",
+      "model": "rb_hospital_bed",
+      "x": 4.425,
+      "y": 1.33,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "rb_bedside_locker-3",
+      "model": "rb_bedside_locker",
+      "x": 5.3,
+      "y": 2.13,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "rb_ward_chair-3",
+      "model": "rb_ward_chair",
+      "x": 4.1,
+      "y": 0.46,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    },
+    {
+      "id": "rb_bay_curtain-3",
+      "model": "rb_bay_curtain",
+      "x": 3.32,
+      "y": 1.43,
+      "z": 0.3,
+      "rot": 90,
+      "scale": 1
+    },
+    {
+      "id": "rb_overbed_table-3",
+      "model": "rb_overbed_table",
+      "x": 3.8,
+      "y": 1.6,
+      "z": 0,
+      "rot": -90,
+      "scale": 1
+    },
+    {
+      "id": "handwash",
+      "model": "rb_handwash_station",
+      "x": 0.0,
+      "y": 2.655,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "linen",
+      "model": "rb_linen_trolley",
+      "x": -2.6,
+      "y": -2.615,
+      "z": 0,
+      "rot": 0,
+      "scale": 1
+    },
+    {
+      "id": "wetsign",
+      "model": "WetFloorSign_01",
+      "x": 1.0,
+      "y": -2.655,
+      "z": 0,
+      "rot": 180,
+      "scale": 1
+    }
+  ],
+  "views": [
+    {
+      "name": "centre",
+      "x": 0,
+      "y": 0,
+      "yaw": 0
+    },
+    {
+      "name": "bay",
+      "x": -1.6,
+      "y": 1.43,
+      "yaw": -90
+    }
+  ],
+  "render": {
+    "quality": "standard"
+  },
+  "outside": {
+    "view": "hospital_grounds",
+    "rotation": 0
+  }
+}

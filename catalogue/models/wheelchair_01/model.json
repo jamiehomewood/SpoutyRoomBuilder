@@ -1,0 +1,32 @@
+{
+  "id": "wheelchair_01",
+  "name": "Wheelchair 01",
+  "file": "wheelchair_01.gltf",
+  "thumb": "thumb.png",
+  "category": "medical",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "infirmary",
+    "hospital",
+    "wheelchair",
+    "medical",
+    "clinic",
+    "mobilityaid",
+    "foldingwheelchair"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 40252,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Garreth Dean",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wheelchair_01",
+    "credit_required": false
+  }
+}

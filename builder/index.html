@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Builder</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<header id="top">
+  <div class="brand">Room Builder</div>
+  <input id="roomName" class="name" spellcheck="false" title="Room name">
+  <div class="btns">
+    <button id="btnNew" title="Start a new room">New</button>
+    <button id="btnOpen" title="Open a saved room or an example">Open</button>
+    <button id="btnSave" title="Save this room so you can come back to it">Save</button>
+    <span class="sep"></span>
+    <button id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
+    <button id="btnRedo" title="Redo (Ctrl+Y)">Redo</button>
+  </div>
+  <div class="mode" role="group" aria-label="Mode">
+    <button data-mode="simple" class="on">Simple</button>
+    <button data-mode="advanced">Advanced</button>
+  </div>
+  <div id="statusDot" class="status" title="Blender status"></div>
+  <button id="btnSettings" class="icon" title="Settings">Settings</button>
+</header>
+
+<div id="layout">
+  <aside id="panel">
+    <nav id="tabs">
+      <button data-tab="room" class="on">Room</button>
+      <button data-tab="walls">Walls</button>
+      <button data-tab="models">Models</button>
+      <button data-tab="views">Views</button>
+      <button data-tab="render">Render</button>
+      <button data-tab="library">Library</button>
+    </nav>
+    <div id="tabBody"></div>
+  </aside>
+
+  <main id="viewport">
+    <canvas id="c"></canvas>
+    <div id="viewBar">
+      <div class="seg" role="group" aria-label="Camera">
+        <button data-cam="plan" class="on" title="Top-down plan: drag things to move them">Plan</button>
+        <button data-cam="orbit" title="3D: drag to look round the model">3D</button>
+        <button data-cam="eye" title="What a student sees from a view point">Eye view</button>
+      </div>
+      <label class="chk" title="Shade the physical floor that the projectors cover"><input type="checkbox" id="chkFloor" checked> Projected floor</label>
+    </div>
+    <div id="hint"></div>
+    <div id="inspector" hidden></div>
+    <div id="warnings" hidden></div>
+    <div id="toast" hidden></div>
+  </main>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlgBody"></form></dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

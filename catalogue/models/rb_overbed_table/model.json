@@ -1,0 +1,28 @@
+{
+  "id": "rb_overbed_table",
+  "name": "Over-bed table",
+  "file": "rb_overbed_table.glb",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Height-adjustable over-bed table.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

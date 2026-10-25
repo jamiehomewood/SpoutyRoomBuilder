@@ -1,0 +1,36 @@
+{
+  "id": "wall_clock",
+  "name": "Wall Clock",
+  "file": "wall_clock.gltf",
+  "thumb": "thumb.png",
+  "category": "electronics",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "time",
+    "timepiece",
+    "watch",
+    "watchface",
+    "wall clock",
+    "analog",
+    "modern",
+    "office decor",
+    "home interior",
+    "admin",
+    "office",
+    "90s"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 3658,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "PierreB3D",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wall_clock",
+    "credit_required": false
+  }
+}

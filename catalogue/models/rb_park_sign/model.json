@@ -1,0 +1,27 @@
+{
+  "id": "rb_park_sign",
+  "name": "Park noticeboard",
+  "file": "rb_park_sign.glb",
+  "thumb": "thumb.png",
+  "category": "outdoor",
+  "styles": [
+    "outdoor"
+  ],
+  "tags": [
+    "park",
+    "sign",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Green noticeboard on two posts. Faces -Y.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

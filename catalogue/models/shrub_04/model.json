@@ -1,0 +1,35 @@
+{
+  "id": "shrub_04",
+  "name": "Shrub 04",
+  "file": "shrub_04.gltf",
+  "thumb": "thumb.png",
+  "category": "plants",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "plant",
+    "shrub",
+    "bush",
+    "nature",
+    "green",
+    "leaf",
+    "foliage",
+    "ground cover",
+    "vegetation",
+    "undergrowth"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 47813,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rico Cilliers",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/shrub_04",
+    "credit_required": false
+  }
+}

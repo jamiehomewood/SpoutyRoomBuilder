@@ -1,0 +1,30 @@
+{
+  "id": "drawer_cabinet",
+  "name": "Drawer Cabinet",
+  "file": "drawer_cabinet.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "wood",
+    "furniture",
+    "shelf",
+    "drawer",
+    "metal",
+    "modern"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 26406,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Ulan Cabanilla",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/drawer_cabinet",
+    "credit_required": false
+  }
+}

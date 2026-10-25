@@ -1,0 +1,27 @@
+{
+  "id": "rb_clerk_desk",
+  "name": "Court clerk's desk",
+  "file": "rb_clerk_desk.glb",
+  "thumb": "thumb.png",
+  "category": "court",
+  "styles": [
+    "court"
+  ],
+  "tags": [
+    "court",
+    "clerk",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Raised panelled front, monitors, files; chair on the +Y side. 2.4 m wide.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

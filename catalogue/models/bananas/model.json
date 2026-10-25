@@ -1,0 +1,30 @@
+{
+  "id": "bananas",
+  "name": "Bananas",
+  "file": "bananas.gltf",
+  "thumb": "thumb.png",
+  "category": "plants",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "banana bunch",
+    "yellow",
+    "single banana",
+    "ripe",
+    "fruit"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 46868,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Alexander Shulha",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/bananas",
+    "credit_required": false
+  }
+}

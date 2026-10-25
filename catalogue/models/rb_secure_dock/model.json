@@ -1,0 +1,27 @@
+{
+  "id": "rb_secure_dock",
+  "name": "Secure dock",
+  "file": "rb_secure_dock.glb",
+  "thumb": "thumb.png",
+  "category": "court",
+  "styles": [
+    "court"
+  ],
+  "tags": [
+    "court",
+    "dock",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Glass-screened dock on a panelled base with a bench for four. 3.0 x 1.7 m, 2.12 m tall. Glass front faces -Y.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

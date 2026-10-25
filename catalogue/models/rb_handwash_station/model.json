@@ -1,0 +1,28 @@
+{
+  "id": "rb_handwash_station",
+  "name": "Clinical hand-wash station",
+  "file": "rb_handwash_station.glb",
+  "thumb": "thumb.png",
+  "category": "medical",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Wall basin with splashback, soap, gel, towel dispenser and pedal bin. Back against the wall.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

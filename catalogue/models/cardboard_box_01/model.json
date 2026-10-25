@@ -1,0 +1,34 @@
+{
+  "id": "cardboard_box_01",
+  "name": "Cardboard Box 01",
+  "file": "cardboard_box_01.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "warehouse",
+    "shed",
+    "storage",
+    "box",
+    "paper",
+    "worn",
+    "old",
+    "broken",
+    "damaged",
+    "garage"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 16952,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rahul Chaudhary",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/cardboard_box_01",
+    "credit_required": false
+  }
+}

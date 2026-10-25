@@ -1,0 +1,40 @@
+{
+  "id": "wooden_bookshelf_worn",
+  "name": "Wooden Bookshelf Worn",
+  "file": "wooden_bookshelf_worn.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "old",
+    "wooden",
+    "wood",
+    "worn",
+    "garage",
+    "shed",
+    "rustic",
+    "antique",
+    "distressed",
+    "aged",
+    "weathered",
+    "bookcase",
+    "shelves",
+    "carpentry",
+    "vintage",
+    "storage"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 10106,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Ulan Cabanilla",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wooden_bookshelf_worn",
+    "credit_required": false
+  }
+}

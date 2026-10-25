@@ -1,0 +1,31 @@
+{
+  "id": "book_encyclopedia_set_01",
+  "name": "Book Encyclopedia Set 01",
+  "file": "book_encyclopedia_set_01.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "bookshelf",
+    "books",
+    "library",
+    "reading",
+    "encyclopedia",
+    "set"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 67306,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "John Malcolm",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/book_encyclopedia_set_01",
+    "credit_required": false
+  }
+}

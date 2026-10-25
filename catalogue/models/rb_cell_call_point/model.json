@@ -1,0 +1,27 @@
+{
+  "id": "rb_cell_call_point",
+  "name": "Cell call point",
+  "file": "rb_cell_call_point.glb",
+  "thumb": "thumb.png",
+  "category": "custody",
+  "styles": [
+    "custody"
+  ],
+  "tags": [
+    "custody",
+    "cell",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Steel call button and speaker plate. Place at z 1.1 against a wall.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

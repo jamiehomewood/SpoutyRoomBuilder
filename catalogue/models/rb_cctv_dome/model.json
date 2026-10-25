@@ -1,0 +1,28 @@
+{
+  "id": "rb_cctv_dome",
+  "name": "CCTV dome",
+  "file": "rb_cctv_dome.glb",
+  "thumb": "thumb.png",
+  "category": "custody",
+  "styles": [
+    "custody",
+    "hospital",
+    "court"
+  ],
+  "tags": [
+    "cctv",
+    "camera"
+  ],
+  "status": "untested",
+  "notes": "Ceiling camera dome. Place at z = ceiling height - 0.12.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

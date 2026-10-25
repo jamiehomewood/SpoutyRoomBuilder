@@ -1,0 +1,32 @@
+{
+  "id": "sofa_02",
+  "name": "Sofa 02",
+  "file": "sofa_02.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "wood",
+    "furniture",
+    "chair",
+    "prop",
+    "couch",
+    "leather",
+    "fabric"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 2728,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Kirill Sannikov",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/sofa_02",
+    "credit_required": false
+  }
+}

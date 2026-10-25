@@ -1,0 +1,38 @@
+{
+  "id": "shrub_02",
+  "name": "Shrub 02",
+  "file": "shrub_02.gltf",
+  "thumb": "thumb.png",
+  "category": "plants",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "sapling",
+    "vegetation",
+    "environment",
+    "ground cover",
+    "foliage",
+    "forest",
+    "leaves",
+    "bush",
+    "jungle",
+    "nature",
+    "leaf",
+    "plant",
+    "green"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 52317,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rico Cilliers",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/shrub_02",
+    "credit_required": false
+  }
+}

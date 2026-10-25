@@ -1,0 +1,27 @@
+{
+  "id": "rb_witness_box",
+  "name": "Witness box",
+  "file": "rb_witness_box.glb",
+  "thumb": "thumb.png",
+  "category": "court",
+  "styles": [
+    "court"
+  ],
+  "tags": [
+    "court",
+    "witness",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Raised panelled witness box with ledge, microphone and water; open at the back.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

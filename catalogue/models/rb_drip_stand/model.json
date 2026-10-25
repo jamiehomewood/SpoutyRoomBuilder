@@ -1,0 +1,28 @@
+{
+  "id": "rb_drip_stand",
+  "name": "Drip stand with pump",
+  "file": "rb_drip_stand.glb",
+  "thumb": "thumb.png",
+  "category": "medical",
+  "styles": [
+    "hospital",
+    "modern"
+  ],
+  "tags": [
+    "hospital",
+    "ward",
+    "clinical"
+  ],
+  "status": "untested",
+  "notes": "Five-leg IV stand with bag and infusion pump.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

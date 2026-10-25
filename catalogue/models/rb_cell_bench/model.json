@@ -1,0 +1,28 @@
+{
+  "id": "rb_cell_bench",
+  "name": "Cell bench with mattress",
+  "file": "rb_cell_bench.glb",
+  "thumb": "thumb.png",
+  "category": "custody",
+  "styles": [
+    "custody"
+  ],
+  "tags": [
+    "custody",
+    "cell",
+    "police",
+    "uk"
+  ],
+  "status": "untested",
+  "notes": "Fixed plinth with blue wipe-clean mattress and grey blanket. 2.0 x 0.7 m. Back against the wall.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

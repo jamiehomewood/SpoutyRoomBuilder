@@ -1,0 +1,31 @@
+{
+  "id": "wooden_display_shelves_01",
+  "name": "Wooden Display Shelves 01",
+  "file": "wooden_display_shelves_01.gltf",
+  "thumb": "thumb.png",
+  "category": "storage",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "modern",
+    "wood",
+    "pine",
+    "square",
+    "display",
+    "shelf",
+    "bookshelf"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 3174,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wooden_display_shelves_01",
+    "credit_required": false
+  }
+}

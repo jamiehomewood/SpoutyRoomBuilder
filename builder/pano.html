@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Builder - 360 view</title>
+<style>
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 14px "Segoe UI", system-ui, sans-serif; color: #e7e9ec; }
+canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+img.raw { width: 100vw; height: 100vh; object-fit: fill; display: block; }
+#bar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#bar .t { background: rgba(21, 23, 26, .85); border: 1px solid #343a41; border-radius: 6px; padding: 5px 10px; }
+#bar a, #bar button { background: rgba(37, 42, 47, .9); border: 1px solid #343a41; border-radius: 6px; padding: 5px 10px; color: #e7e9ec; text-decoration: none; cursor: pointer; font: inherit; }
+#bar a.on { border-color: #e8a33d; color: #f3c27a; }
+#help { position: absolute; bottom: 10px; right: 12px; color: #9aa3ad; font-size: 12px; background: rgba(21, 23, 26, .75); padding: 4px 8px; border-radius: 6px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+// A finished room from the library. ?lib=<id>&view=<name>; add &raw=1 for just the image filling the window
+// (for Spouty -> IglooPreview), otherwise a drag-to-look 360 viewer.
+import * as THREE from 'three';
+const p = new URLSearchParams(location.search);
+const lib = p.get('lib'), view = p.get('view') || 'centre';
+const base = `/library/${encodeURIComponent(lib)}`;
+const src = `${base}/view_${encodeURIComponent(view)}.${p.get('png') ? 'png' : 'jpg'}`;
+
+if (p.get('raw')) {
+  const img = document.createElement('img'); img.className = 'raw'; img.src = src; document.body.append(img);
+} else {
+  const meta = await (await fetch(`${base}/meta.json`)).json().catch(() => ({ views: [view], name: lib }));
+  document.title = `${meta.name} - ${view}`;
+  const bar = document.createElement('div'); bar.id = 'bar';
+  bar.innerHTML = `<span class="t">${meta.name}</span>` + meta.views.map(v => `<a class="${v === view ? 'on' : ''}" href="?lib=${encodeURIComponent(lib)}&view=${encodeURIComponent(v)}">${v}</a>`).join('') +
+    `<a href="${base}/view_${encodeURIComponent(view)}.png" download>PNG</a><a href="${base}/view_${encodeURIComponent(view)}.jpg" download>JPG</a>` +
+    `<a href="?lib=${encodeURIComponent(lib)}&view=${encodeURIComponent(view)}&raw=1">Raw (for Spouty)</a><a href="${base}/credits.md" target="_blank">Credits</a>`;
+  document.body.append(bar);
+  const help = document.createElement('div'); help.id = 'help'; help.textContent = 'Drag to look round · wheel to zoom'; document.body.append(help);
+  const canvas = document.createElement('canvas'); document.body.prepend(canvas);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
+  const tex = new THREE.TextureLoader().load(src); tex.colorSpace = THREE.SRGBColorSpace;
+  const geo = new THREE.SphereGeometry(10, 96, 64); geo.scale(-1, 1, 1);
+  const sphere = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
+  sphere.rotation.y = -Math.PI / 2;     // the image centre (the view's yaw) straight ahead at start
+  scene.add(sphere);
+  let yaw = 0, pitch = 0, drag = null;
+  const size = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); };
+  addEventListener('resize', size); size();
+  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw, pitch }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => { if (!drag) return; yaw = drag.yaw + (e.clientX - drag.x) * 0.2; pitch = Math.max(-85, Math.min(85, drag.pitch + (e.clientY - drag.y) * 0.2)); });
+  canvas.addEventListener('pointerup', () => (drag = null));
+  canvas.addEventListener('wheel', e => { cam.fov = Math.max(30, Math.min(110, cam.fov + Math.sign(e.deltaY) * 4)); cam.updateProjectionMatrix(); e.preventDefault(); }, { passive: false });
+  (function loop() {
+    requestAnimationFrame(loop);
+    const y = THREE.MathUtils.degToRad(yaw), pt = THREE.MathUtils.degToRad(pitch);
+    cam.lookAt(new THREE.Vector3(Math.sin(y) * Math.cos(pt), Math.sin(pt), -Math.cos(y) * Math.cos(pt)));
+    renderer.render(scene, cam);
+  })();
+}
+</script>
+</body>
+</html>

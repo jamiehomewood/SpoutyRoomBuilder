@@ -1,0 +1,36 @@
+{
+  "id": "outdoor_table_chair_set_01",
+  "name": "Outdoor Table Chair Set 01",
+  "file": "outdoor_table_chair_set_01.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "neglected"
+  ],
+  "tags": [
+    "outdoor",
+    "foldable",
+    "folding",
+    "seating",
+    "coffee",
+    "diner",
+    "street",
+    "urban",
+    "deli",
+    "wood",
+    "city",
+    "cafe"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 9828,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+    "credit_required": false
+  }
+}

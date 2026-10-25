@@ -1,0 +1,36 @@
+{
+  "_note": "What is seen through windows and outside doors, or all round in an outdoor scene: Poly Haven HDRIs (CC0). Each view has a photo for day, dusk and night; the room's Light setting picks one. Day photos marked UK were taken in the UK (Poly Haven location data); there are no UK dusk or night photos, so those are the closest matches. 'strength' scales the photo's brightness. Downloaded on first use into textures/hdri/.",
+  "views": [
+    { "id": "park", "name": "Park, big tree and path (Greenwich, UK)", "styles": ["outdoor", "modern", "neglected"],
+      "day": "greenwich_park_02", "dusk": "spruit_sunrise", "night": "moonlit_golf" },
+    { "id": "park_open", "name": "Park, open grass (Greenwich, UK)", "styles": ["outdoor", "modern", "neglected", "hospital"],
+      "day": "greenwich_park_03", "dusk": "stuttgart_suburbs", "night": "street_lamp" },
+    { "id": "park_sunny", "name": "Park, sunny hill (Greenwich, UK)", "styles": ["outdoor", "modern"],
+      "day": "greenwich_park", "dusk": "spruit_sunrise", "night": "moonlit_golf" },
+    { "id": "woodland", "name": "Woodland (Epping Forest, UK)", "styles": ["outdoor", "modern", "neglected"],
+      "day": "epping_forest_02", "dusk": "spruit_sunrise", "night": "moonlit_golf" },
+    { "id": "terraced_street", "name": "Terraced street (London, UK)", "styles": ["outdoor", "modern", "neglected", "custody"],
+      "day": "urban_street_03", "dusk": "stuttgart_suburbs", "night": "street_lamp" },
+    { "id": "town_street", "name": "Town street (London, UK)", "styles": ["outdoor", "modern", "neglected", "court"],
+      "day": "urban_street_01", "dusk": "suburban_parking_area", "night": "cobblestone_street_night" },
+    { "id": "estate", "name": "Estate and railway arches (London, UK)", "styles": ["outdoor", "neglected", "custody"],
+      "day": "urban_street_02", "dusk": "suburban_parking_area", "night": "street_lamp" },
+    { "id": "hospital_grounds", "name": "Hospital grounds, trees and railings (London, UK)", "styles": ["hospital", "court"],
+      "day": "bethnal_green_entrance", "dusk": "suburban_parking_area", "night": "courtyard_night" },
+    { "id": "college", "name": "College court (Cambridge, UK)", "styles": ["outdoor", "court", "modern"],
+      "day": "cambridge", "dusk": "stuttgart_suburbs", "night": "courtyard_night" },
+    { "id": "garden", "name": "Garden (overcast)", "styles": ["modern", "neglected"],
+      "day": "quadrangle_cloudy", "dusk": "stuttgart_suburbs", "night": "street_lamp" },
+    { "id": "car_park", "name": "Car park", "styles": ["hospital", "modern"],
+      "day": "mall_parking_lot", "dusk": "suburban_parking_area", "night": "street_lamp" },
+    { "id": "upper_floor", "name": "Upper floor, roof garden (London, UK)", "styles": ["hospital", "modern", "court"],
+      "day": "roof_garden", "dusk": "rooftop_night", "night": "neuer_zollhof" }
+  ],
+  "strength": {
+    "quadrangle_cloudy": 1.0, "urban_street_01": 1.2, "urban_street_02": 1.2, "urban_street_03": 1.2, "stuttgart_suburbs": 1.2,
+    "bethnal_green_entrance": 1.2, "mall_parking_lot": 0.8, "roof_garden": 1.0, "suburban_parking_area": 1.2, "cambridge": 1.2,
+    "greenwich_park": 0.7, "greenwich_park_02": 1.0, "greenwich_park_03": 1.1, "epping_forest_02": 0.8, "spruit_sunrise": 0.8,
+    "rooftop_night": 1.2, "street_lamp": 1.0, "cobblestone_street_night": 0.8, "courtyard_night": 0.8, "neuer_zollhof": 0.8, "moonlit_golf": 1.0
+  },
+  "style_default": { "modern": "park_open", "neglected": "terraced_street", "hospital": "hospital_grounds", "court": "town_street", "custody": "estate", "outdoor": "park" }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "Ottoman_01",
+  "name": "Ottoman 01",
+  "file": "Ottoman_01.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "furniture",
+    "leather",
+    "chair",
+    "fabric",
+    "ottoman",
+    "upholstery",
+    "interior design",
+    "living room",
+    "lounge"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 4240,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Caspian Fortune",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/Ottoman_01",
+    "credit_required": false
+  }
+}

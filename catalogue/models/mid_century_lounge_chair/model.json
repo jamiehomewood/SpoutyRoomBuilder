@@ -1,0 +1,38 @@
+{
+  "id": "mid_century_lounge_chair",
+  "name": "Mid Century Lounge Chair",
+  "file": "mid_century_lounge_chair.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "modern"
+  ],
+  "tags": [
+    "wooden",
+    "leather",
+    "couch",
+    "lounge",
+    "architecture",
+    "modern",
+    "interior design",
+    "home decor",
+    "living room",
+    "comfort",
+    "stylish",
+    "recliner",
+    "retro",
+    "classy"
+  ],
+  "status": "room-tested",
+  "notes": "Used in the Glenda room renders.",
+  "scale": 1.0,
+  "polycount": 6148,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Kuutti Siitonen",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/mid_century_lounge_chair",
+    "credit_required": false
+  }
+}
