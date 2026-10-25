@@ -1,0 +1,359 @@
+{
+ "version": 1,
+ "name": "Halloween - derelict flat (lights off)",
+ "room": {
+  "preset": "igloo-main",
+  "width": 6.4,
+  "depth": 5.71,
+  "height": 2.244,
+  "eye": 1.12,
+  "projected": {
+   "walls": true,
+   "floor": true,
+   "ceiling": false
+  }
+ },
+ "style": "modern",
+ "condition": "neglected",
+ "lighting": "night",
+ "outside": {
+  "view": "woodland",
+  "rotation": 40,
+  "strength": 0.12
+ },
+ "finishes": {
+  "walls": {
+   "type": "paint",
+   "colour": "#6e6f6c",
+   "sheen": "matt"
+  },
+  "lower": {
+   "type": "none"
+  },
+  "floor": {
+   "type": "tiles",
+   "tile_size": "sq30",
+   "colour": "#e6e2d6",
+   "colour2": "#1d1d1f",
+   "layout": "diagonal",
+   "grout": "#8e8e8a"
+  },
+  "ceiling": {
+   "type": "plaster",
+   "colour": "#d8d4c8"
+  },
+  "trim": {
+   "colour": "#e8e6e0",
+   "sheen": "gloss"
+  }
+ },
+ "wall_finishes": {
+  "north": {
+   "walls": {
+    "type": "wallpaper",
+    "pattern": "damask",
+    "colour": "#2a1f33",
+    "colour2": "#6b4a7a"
+   }
+  }
+ },
+ "features": [
+  {
+   "id": "sofa-bay",
+   "type": "alcove",
+   "wall": "north",
+   "pos": 0.0,
+   "width": 3.0,
+   "depth": 0.9
+  },
+  {
+   "id": "window",
+   "type": "window",
+   "wall": "west",
+   "pos": 0.9,
+   "width": 1.3,
+   "sill": 0.85,
+   "height": 1.15,
+   "dressing": "curtains"
+  },
+  {
+   "id": "rocker-nook",
+   "type": "alcove",
+   "wall": "west",
+   "pos": -1.3,
+   "width": 1.2,
+   "depth": 1.05
+  },
+  {
+   "id": "cabinet-bay",
+   "type": "alcove",
+   "wall": "east",
+   "pos": 1.2,
+   "width": 1.9,
+   "depth": 0.9
+  },
+  {
+   "id": "clock-nook",
+   "type": "alcove",
+   "wall": "east",
+   "pos": -1.4,
+   "width": 0.9,
+   "depth": 0.6
+  },
+  {
+   "id": "tv-bay",
+   "type": "alcove",
+   "wall": "south",
+   "pos": -1.0,
+   "width": 2.4,
+   "depth": 0.7
+  },
+  {
+   "id": "door",
+   "type": "door",
+   "wall": "south",
+   "pos": 1.7,
+   "width": 0.86,
+   "height": 2.0,
+   "beyond": "dark"
+  }
+ ],
+ "items": [
+  {
+   "id": "sofa",
+   "model": "sofa_02",
+   "x": -0.2,
+   "y": 3.345,
+   "z": 0,
+   "rot": 0,
+   "scale": 1
+  },
+  {
+   "id": "side-table",
+   "model": "side_table_01",
+   "x": 1.05,
+   "y": 3.5,
+   "z": 0,
+   "rot": 0,
+   "scale": 1
+  },
+  {
+   "id": "pumpkin-1",
+   "model": "rb_jack_o_lantern",
+   "x": 1.05,
+   "y": 3.5,
+   "z": 0.551,
+   "rot": 0,
+   "scale": 1,
+   "sit": true
+  },
+  {
+   "id": "rocker",
+   "model": "Rockingchair_01",
+   "x": -3.8,
+   "y": -1.3,
+   "z": 0,
+   "rot": 90,
+   "scale": 1
+  },
+  {
+   "id": "pumpkin-2",
+   "model": "rb_jack_o_lantern",
+   "x": -3.95,
+   "y": -0.88,
+   "z": 0,
+   "rot": 90,
+   "scale": 0.85
+  },
+  {
+   "id": "candles-floor",
+   "model": "rb_candles",
+   "x": -3.95,
+   "y": -1.75,
+   "z": 0,
+   "rot": 0,
+   "scale": 1
+  },
+  {
+   "id": "cabinet",
+   "model": "GothicCabinet_01",
+   "x": 3.69,
+   "y": 1.2,
+   "z": 0,
+   "rot": -90,
+   "scale": 0.9
+  },
+  {
+   "id": "clock",
+   "model": "vintage_grandfather_clock_01",
+   "x": 3.59,
+   "y": -1.4,
+   "z": 0,
+   "rot": -90,
+   "scale": 0.95
+  },
+  {
+   "id": "mirror",
+   "model": "ornate_mirror_01",
+   "x": 3.185,
+   "y": -0.25,
+   "z": 1.15,
+   "rot": -90,
+   "scale": 1,
+   "sit": false
+  },
+  {
+   "id": "tv-cabinet",
+   "model": "painted_wooden_cabinet",
+   "x": -1.0,
+   "y": -3.245,
+   "z": 0,
+   "rot": 180,
+   "scale": 1
+  },
+  {
+   "id": "tv",
+   "model": "television_02",
+   "x": -1.0,
+   "y": -3.28,
+   "z": 1.182,
+   "rot": 180,
+   "scale": 1,
+   "sit": true
+  },
+  {
+   "id": "candles-tv",
+   "model": "rb_candles",
+   "x": -0.6,
+   "y": -3.25,
+   "z": 1.182,
+   "rot": 0,
+   "scale": 0.8,
+   "sit": true
+  },
+  {
+   "id": "candlestick",
+   "model": "wooden_candlestick",
+   "x": -1.45,
+   "y": -3.25,
+   "z": 1.182,
+   "rot": 0,
+   "scale": 1,
+   "sit": true
+  },
+  {
+   "id": "trashbag",
+   "model": "trashbag",
+   "x": -0.1,
+   "y": -3.25,
+   "z": 0,
+   "rot": 160,
+   "scale": 1
+  },
+  {
+   "id": "box",
+   "model": "cardboard_box_01",
+   "x": -1.95,
+   "y": -3.2,
+   "z": 0,
+   "rot": 170,
+   "scale": 1
+  }
+ ],
+ "decals": [
+  {
+   "decal": "hw_cobweb",
+   "surface": "north",
+   "u": -2.8,
+   "z": 1.844,
+   "width": 0.8,
+   "rot": 0
+  },
+  {
+   "decal": "hw_cobweb",
+   "surface": "east",
+   "u": -2.455,
+   "z": 1.844,
+   "width": 0.8,
+   "rot": -90
+  },
+  {
+   "decal": "hw_bats",
+   "surface": "alcove:sofa-bay",
+   "u": -0.2,
+   "z": 1.72,
+   "width": 1.7,
+   "rot": 0
+  },
+  {
+   "decal": "hw_pumpkin_drawing",
+   "surface": "alcove:sofa-bay",
+   "u": 1.05,
+   "z": 1.45,
+   "width": 0.31,
+   "rot": 0
+  },
+  {
+   "decal": "hw_trick_or_treat",
+   "surface": "north",
+   "u": -2.35,
+   "z": 1.2,
+   "width": 1.6,
+   "rot": 0
+  },
+  {
+   "decal": "hw_boo",
+   "surface": "north",
+   "u": 2.35,
+   "z": 1.2,
+   "width": 1.2,
+   "rot": 0
+  },
+  {
+   "decal": "damp_stain",
+   "surface": "north",
+   "u": 2.55,
+   "z": 1.92,
+   "width": 1.0,
+   "rot": 0,
+   "opacity": 0.9
+  },
+  {
+   "decal": "hw_handprints",
+   "surface": "west",
+   "u": 2.2,
+   "z": 1.1,
+   "width": 0.55,
+   "rot": 0
+  },
+  {
+   "decal": "mould_patch",
+   "surface": "west",
+   "u": -2.4,
+   "z": 0.45,
+   "width": 0.8,
+   "rot": 0
+  },
+  {
+   "decal": "wall_crack",
+   "surface": "south",
+   "u": 0.75,
+   "z": 1.5,
+   "width": 0.6,
+   "rot": 0
+  }
+ ],
+ "views": [
+  {
+   "name": "centre",
+   "x": 0,
+   "y": 0,
+   "yaw": 0
+  }
+ ],
+ "render": {
+  "quality": "standard"
+ },
+ "light_level": 0.35,
+ "lights_on": false
+}

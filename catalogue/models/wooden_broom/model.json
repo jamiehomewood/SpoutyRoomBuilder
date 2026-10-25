@@ -1,0 +1,31 @@
+{
+  "id": "wooden_broom",
+  "name": "Wooden Broom",
+  "file": "wooden_broom.gltf",
+  "thumb": "thumb.png",
+  "category": "misc",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "cleaning",
+    "janitorial",
+    "housekeeping",
+    "wood",
+    "worn",
+    "old"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 14258,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Balen",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wooden_broom",
+    "credit_required": false
+  }
+}

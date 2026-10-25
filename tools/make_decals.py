@@ -213,9 +213,110 @@ def wall_crack():
     return img.filter(ImageFilter.GaussianBlur(0.6)), "Plaster crack", 0.6, "damage"
 
 
+# ------------------------------------------------------------------ Halloween
+def bats():
+    """A flock of bat silhouettes."""
+    rnd = random.Random(31)
+    img = canvas(1.2, 0.6); d = ImageDraw.Draw(img); W, H = img.size
+    for _ in range(9):
+        cx, cy, s = rnd.uniform(0.1, 0.9) * W, rnd.uniform(0.15, 0.85) * H, rnd.uniform(40, 110)
+        up = rnd.uniform(-0.3, 0.5)
+        wing = []
+        for sx in (1, -1):
+            pts = [(cx, cy)]
+            for k, (fx, fy) in enumerate(((0.35, -0.35 - up), (0.7, -0.5 - up), (1.0, -0.2 - up), (0.82, 0.05), (0.62, -0.05), (0.45, 0.12), (0.25, 0.02))):
+                pts.append((cx + sx * fx * s, cy + fy * s))
+            d.polygon(pts, fill=(12, 10, 14, 245))
+        d.ellipse([cx - s * 0.12, cy - s * 0.18, cx + s * 0.12, cy + s * 0.2], fill=(12, 10, 14, 250))
+        d.polygon([(cx - s * 0.1, cy - s * 0.14), (cx - s * 0.05, cy - s * 0.3), (cx - s * 0.01, cy - s * 0.15)], fill=(12, 10, 14, 250))
+        d.polygon([(cx + s * 0.1, cy - s * 0.14), (cx + s * 0.05, cy - s * 0.3), (cx + s * 0.01, cy - s * 0.15)], fill=(12, 10, 14, 250))
+    return img, "Bats (silhouettes)", 1.2, "halloween"
+
+
+def cobweb():
+    """A cobweb for a top-left corner: radial threads and sagging spiral, with dust."""
+    rnd = random.Random(13)
+    img = canvas(0.8, 0.8); d = ImageDraw.Draw(img); W, H = img.size
+    angles = [i / 9 * (math.pi / 2) for i in range(10)]
+    L = W * 1.0
+    for a in angles:
+        d.line([(0, 0), (math.cos(a) * L, math.sin(a) * L)], fill=(235, 235, 230, 170), width=2)
+    for k in range(1, 14):
+        r = L * k / 14 * rnd.uniform(0.95, 1.05)
+        pts = []
+        for i in range(len(angles) - 1):
+            a0, a1 = angles[i], angles[i + 1]
+            for t in (0, 0.25, 0.5, 0.75):
+                a = a0 + (a1 - a0) * t; sag = 1 - 0.07 * math.sin(math.pi * t)
+                pts.append((math.cos(a) * r * sag, math.sin(a) * r * sag))
+        pts.append((math.cos(angles[-1]) * r, math.sin(angles[-1]) * r))
+        d.line(pts, fill=(235, 235, 230, 150), width=2)
+    for _ in range(3):                                                                                  # a few broken strands
+        a = rnd.uniform(0, 1.5); r = rnd.uniform(0.4, 0.9) * L
+        d.line([(math.cos(a) * r, math.sin(a) * r), (math.cos(a) * r + rnd.uniform(-40, 40), math.sin(a) * r + rnd.uniform(60, 140))], fill=(235, 235, 230, 130), width=2)
+    return img.filter(ImageFilter.GaussianBlur(0.5)), "Cobweb (top-left corner)", 0.8, "halloween"
+
+
+def pumpkin_drawing():
+    """A child's Halloween drawing: pumpkin, ghost and bats, on orange paper, taped up."""
+    rnd = random.Random(17)
+    img = canvas(0.297, 0.21, (246, 214, 160, 255)); d = ImageDraw.Draw(img); W, H = img.size
+    px, py, r = W * 0.33, H * 0.62, H * 0.27
+    crayon_fill(img, [(px + r * 1.15 * math.cos(a / 20 * 6.283), py + r * 0.9 * math.sin(a / 20 * 6.283)) for a in range(20)], (235, 110, 20), rnd)
+    crayon_line(d, [(px + r * 1.15 * math.cos(a / 20 * 6.283), py + r * 0.9 * math.sin(a / 20 * 6.283)) for a in range(21)], (170, 60, 10), 5, rnd)
+    crayon_line(d, [(px, py - r * 0.9), (px + 6, py - r * 1.25)], (60, 110, 30), 7, rnd)
+    for sx in (-1, 1):
+        d.polygon([(px + sx * 20, py - 18), (px + sx * 55, py - 18), (px + sx * 38, py - 45)], fill=(30, 20, 10, 230))
+    d.polygon([(px - 50, py + 20), (px - 25, py + 35), (px, py + 22), (px + 25, py + 35), (px + 50, py + 20), (px + 30, py + 55), (px - 30, py + 55)], fill=(30, 20, 10, 230))
+    gx, gy = W * 0.75, H * 0.45                                                                       # ghost
+    ghost = [(gx - 32, gy + 60), (gx - 32, gy - 10), (gx - 20, gy - 38), (gx, gy - 46), (gx + 20, gy - 38), (gx + 32, gy - 10), (gx + 32, gy + 60),
+             (gx + 20, gy + 48), (gx + 8, gy + 60), (gx - 6, gy + 48), (gx - 20, gy + 60)]
+    crayon_fill(img, ghost, (255, 255, 255), rnd); crayon_line(d, ghost + [ghost[0]], (90, 90, 110), 4, rnd)
+    d.ellipse([gx - 15, gy - 20, gx - 5, gy - 6], fill=(20, 20, 20, 240)); d.ellipse([gx + 5, gy - 20, gx + 15, gy - 6], fill=(20, 20, 20, 240))
+    d.text((W * 0.06, H * 0.06), "HAPPY HALLOWEEN", font=font(20), fill=(90, 30, 120, 230))
+    for tx in (0, W - 60): d.rectangle([tx + 5, 0, tx + 55, 22], fill=(235, 230, 200, 150))
+    img = img.rotate(rnd.uniform(-4, 4), resample=Image.BICUBIC, expand=True)
+    return img, "Child's Halloween drawing", 0.31, "halloween"
+
+
+def graffiti_boo():
+    rnd = random.Random(23)
+    img = canvas(1.3, 0.6)
+    spray(img, "BOO!", 300, (245, 120, 15), (25, 10, 35), rnd, drips=True, angle=-7)
+    return img, "BOO! (orange spray)", 1.3, "halloween"
+
+
+def graffiti_trick():
+    rnd = random.Random(29)
+    img = canvas(2.0, 0.55)
+    spray(img, "TRICK OR TREAT", 150, (120, 220, 60), (20, 40, 10), rnd, drips=True, angle=3)
+    return img, "TRICK OR TREAT (green spray)", 2.0, "halloween"
+
+
+def handprints():
+    """Orange paint handprints, smeared, as if someone dragged their hands down the wall."""
+    rnd = random.Random(37)
+    img = canvas(0.6, 0.9); W, H = img.size
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(layer)
+    for k, (hx, hy, ang) in enumerate(((0.32, 0.25, -12), (0.68, 0.32, 10), (0.45, 0.62, -4))):
+        cx, cy = hx * W, hy * H
+        c = (200, 70, 10, 220)
+        d.ellipse([cx - 45, cy - 30, cx + 45, cy + 60], fill=c)                               # palm
+        for f, (dx, ln) in enumerate(((-38, 70), (-14, 90), (10, 95), (34, 80))):              # fingers
+            d.rounded_rectangle([cx + dx - 10, cy - 30 - ln, cx + dx + 10, cy - 20], 10, fill=c)
+        d.rounded_rectangle([cx + 40, cy - 5, cx + 85, cy + 15], 10, fill=c)                  # thumb
+        for _ in range(4):                                                                     # smears downward
+            sx = cx + rnd.uniform(-40, 40); d.line([(sx, cy + 50), (sx + rnd.uniform(-6, 6), cy + 50 + rnd.uniform(60, 160))], fill=(200, 70, 10, 160), width=int(rnd.uniform(8, 18)))
+    layer = layer.rotate(0, resample=Image.BICUBIC).filter(ImageFilter.GaussianBlur(1.5))
+    img.alpha_composite(layer)
+    return img, "Paint handprints (orange, smeared)", 0.6, "halloween"
+
+
 DECALS = [("child_drawing_house", child_drawing), ("crayon_scribbles", crayon_scribbles), ("graffiti_tag", graffiti_tag),
           ("graffiti_piece", graffiti_piece), ("graffiti_scrawl", graffiti_scrawl), ("poster_handwash", poster_handwash),
-          ("sign_no_smoking", sign_no_smoking), ("mould_patch", mould_patch), ("damp_stain", damp_stain), ("wall_crack", wall_crack)]
+          ("sign_no_smoking", sign_no_smoking), ("mould_patch", mould_patch), ("damp_stain", damp_stain), ("wall_crack", wall_crack),
+          ("hw_bats", bats), ("hw_cobweb", cobweb), ("hw_pumpkin_drawing", pumpkin_drawing), ("hw_boo", graffiti_boo),
+          ("hw_trick_or_treat", graffiti_trick), ("hw_handprints", handprints)]
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

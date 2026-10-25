@@ -1,0 +1,39 @@
+{
+  "id": "Rockingchair_01",
+  "name": "Rockingchair 01",
+  "file": "Rockingchair_01.gltf",
+  "thumb": "thumb.png",
+  "category": "seating",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "chair",
+    "vintage",
+    "prop",
+    "wood",
+    "furniture",
+    "rocking chair",
+    "rocking",
+    "decorative",
+    "curved legs",
+    "traditional",
+    "solid wood",
+    "armrest",
+    "slatted backrest",
+    "antique style"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 11866,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Jorge Camacho",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/Rockingchair_01",
+    "credit_required": false
+  }
+}

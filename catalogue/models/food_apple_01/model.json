@@ -1,0 +1,35 @@
+{
+  "id": "food_apple_01",
+  "name": "Food Apple 01",
+  "file": "food_apple_01.gltf",
+  "thumb": "thumb.png",
+  "category": "kitchen",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "food",
+    "fruit",
+    "apple",
+    "fruitbowl",
+    "red",
+    "ripe",
+    "fresh",
+    "organic",
+    "stem",
+    "ripe apple"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 7012,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Oliver Harries",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/food_apple_01",
+    "credit_required": false
+  }
+}

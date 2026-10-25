@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halloween Room</title>
+<style>
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 14px "Segoe UI", system-ui, sans-serif; color: #e7e9ec; }
+canvas { width: 100vw; height: 100vh; display: block; }
+#start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+  background: rgba(0, 0, 0, .55); cursor: pointer; font-size: 28px; letter-spacing: .04em; }
+#start small { font-size: 15px; color: #b9b2c4; }
+#hud { position: fixed; left: 12px; bottom: 10px; background: rgba(12, 10, 16, .75); border: 1px solid #3a3346; border-radius: 6px;
+  padding: 6px 10px; font-size: 13px; color: #cfc6dc; white-space: pre; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="start">Click to start the Halloween room<small>sound needs a click · keys 1–9, 0, F, J trigger scares · A auto · M mute · H hide this</small></div>
+<div id="hud" hidden></div>
+<script type="module">
+// Halloween scare layer for a Room Builder render, shown as one equirectangular 360 image (give it to Spouty at
+// 4096 x 2048, or an Igloo web layer set to 360 / equirectangular).
+//   ?lit=<library id of the lights-on render>&dark=<library id of the lights-off render>&view=centre
+//   &auto=1 (default) runs the 8-minute cycle, &cycle=<seconds>, &hud=0 hides the status box, &autostart=1 skips the click
+// Lights flicker and black out by cross-fading the two renders; lightning, the pumpkin flare and room shake are applied on
+// top; doors, spiders, the pumpkin face, the ghost, bats and the figure outside are 3D objects rendered from the eye point,
+// hidden behind an invisible copy of the room's walls so they only show where they should (e.g. the figure through the window).
+// Photosensitivity: no more than two flashes in any second, flicker steps at least 0.35 s apart.
+import * as THREE from 'three';
+import { buildRoom, roomFrame, b2t, span } from './scene.js';
+
+const P = new URLSearchParams(location.search);
+const LIT = P.get('lit'), DARK = P.get('dark'), VIEW = P.get('view') || 'centre';
+const CYCLE = +(P.get('cycle') || 480);
+let auto = P.get('auto') !== '0';
+const hud = document.getElementById('hud'); let hudOn = P.get('hud') !== '0';
+
+// ------------------------------------------------------------------ renderer and compositor
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, preserveDrawingBuffer: false });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+function resize() { renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight, false); }
+addEventListener('resize', resize); resize();
+
+const spec = await (await fetch(`/library/${encodeURIComponent(LIT)}/spec.json`)).json();
+const F = roomFrame(spec);
+const view = (spec.views || []).find(v => v.name === VIEW) || spec.views?.[0] || { x: 0, y: 0, yaw: 0 };
+const EYE = b2t(+view.x || 0, +view.y || 0, +(view.z ?? F.eye));
+
+const loader = new THREE.TextureLoader();
+const loadTex = url => new Promise(res => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; res(t); }, undefined, () => res(null)));
+const texLit = await loadTex(`/library/${encodeURIComponent(LIT)}/view_${VIEW}.jpg`);
+const texDark = DARK ? (await loadTex(`/library/${encodeURIComponent(DARK)}/view_${VIEW}.jpg`)) : null;
+
+const cubeRT = new THREE.WebGLCubeRenderTarget(1024, { generateMipmaps: false, type: THREE.HalfFloatType });
+const cubeCam = new THREE.CubeCamera(0.02, 60, cubeRT); cubeCam.position.copy(EYE);
+const U = {
+  lit: { value: texLit }, dark: { value: texDark || texLit }, hasDark: { value: texDark ? 1 : 0 }, env: { value: cubeRT.texture },
+  lightMix: { value: 1 }, bright: { value: 1 }, flash: { value: 0 }, flashDir: { value: new THREE.Vector3(1, 0, 0) },
+  glow: { value: 0 }, glowDir: { value: new THREE.Vector3(0, 0, -1) }, shake: { value: new THREE.Vector2(0, 0) }, viewYaw: { value: (+view.yaw || 0) * Math.PI / 180 },
+};
+const comp = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: U, depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D lit, dark; uniform float hasDark; uniform samplerCube env;
+    uniform float lightMix, bright, flash, glow, viewYaw; uniform vec3 flashDir, glowDir; uniform vec2 shake;
+    varying vec2 vUv;
+    void main(){
+      float lon = (vUv.x - 0.5) * 6.28318530718 + shake.x;
+      float lat = clamp((vUv.y - 0.5) * 3.14159265359 + shake.y, -1.5707, 1.5707);
+      vec2 puv = vec2(fract(lon / 6.28318530718 + 0.5), lat / 3.14159265359 + 0.5);
+      vec3 L = texture2D(lit, puv).rgb;
+      vec3 D = hasDark > 0.5 ? texture2D(dark, puv).rgb : L * 0.12;
+      vec3 base = mix(D, L, lightMix) * bright;
+      float wl = lon + viewYaw;
+      vec3 d = vec3(sin(wl) * cos(lat), sin(lat), -cos(wl) * cos(lat));
+      // lightning: the whole room lifts a little, the window side a lot (cool white)
+      float fw = pow(max(dot(d, flashDir), 0.0), 3.0);
+      base += flash * (base * 1.6 + vec3(0.06, 0.07, 0.09)) * (0.35 + 1.4 * fw);
+      // a pumpkin flaring up: warm light round the pumpkin
+      float g = pow(max(dot(d, glowDir), 0.0), 220.0);
+      base += glow * (vec3(1.0, 0.42, 0.05) * g * 1.4 + base * vec3(0.5, 0.2, 0.02) * pow(max(dot(d, glowDir), 0.0), 6.0));
+      vec4 o = textureCube(env, d);
+      gl_FragColor = vec4(mix(base, o.rgb, o.a), 1.0);
+      #include <colorspace_fragment>
+    }`,
+}));
+const compScene = new THREE.Scene(); compScene.add(comp);
+const compCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+// ------------------------------------------------------------------ the 3D overlay scene
+const scene = new THREE.Scene();
+// an invisible copy of the room: writes depth only, so effects behind walls are hidden; glass and nets let them through
+const room = buildRoom(spec);
+room.root.traverse(o => {
+  if (!o.isMesh) return;
+  const m = o.material, see = m && (m.transparent || m.opacity < 1);
+  if (see || o.name === 'decals' || o.parent?.name === 'decals') { o.visible = false; return; }
+  o.material = new THREE.MeshBasicMaterial({ colorWrite: false });
+});
+const decGroup = room.root.getObjectByName('decals'); if (decGroup) decGroup.visible = false;
+scene.add(room.root);
+const amb = new THREE.AmbientLight(0xffffff, 0.4); scene.add(amb);
+const bulb = new THREE.PointLight(0xffd8a0, 3, 9, 1.4); bulb.position.copy(b2t(0, Math.min(0.9, F.D / 4), F.RH - 0.2)); scene.add(bulb);
+const flashLight = new THREE.DirectionalLight(0xcfe0ff, 0); scene.add(flashLight); scene.add(flashLight.target);
+
+const items = spec.items || [];
+const PUMPKINS = items.filter(i => i.model === 'rb_jack_o_lantern').map(i => b2t(+i.x, +i.y, +(i.z || 0) + 0.15 * (+i.scale || 1)));
+const CLOCK = items.find(i => /clock/.test(i.model));
+const WINDOW = (spec.features || []).find(f => f.type === 'window');
+const DOOR = (spec.features || []).find(f => f.type === 'door');
+const dirTo = p => p.clone().sub(EYE).normalize();
+if (WINDOW) { const c = F.w2(WINDOW.wall, +WINDOW.pos, 2, +(WINDOW.sill ?? 0.8) + +(WINDOW.height ?? 1.2) / 2); U.flashDir.value.copy(dirTo(b2t(...c))); flashLight.position.copy(b2t(...c)); }
+
+// ---- canvas textures (own drawings)
+function ctex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+const evilPumpkin = ctex(512, 512, (x, W, H) => {
+  const g = x.createRadialGradient(W / 2, H * 0.55, 30, W / 2, H * 0.55, W * 0.48);
+  g.addColorStop(0, '#ff9a2a'); g.addColorStop(0.7, '#d4560a'); g.addColorStop(1, 'rgba(120,30,0,0)');
+  x.fillStyle = g; x.beginPath(); x.ellipse(W / 2, H * 0.55, W * 0.47, H * 0.4, 0, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#3a6a10'; x.fillRect(W * 0.47, H * 0.08, W * 0.06, H * 0.12);
+  const hole = (pts) => { x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a * W, b * H) : x.moveTo(a * W, b * H)); x.closePath(); x.fill(); };
+  x.shadowColor = '#fff1a0'; x.shadowBlur = 40; x.fillStyle = '#fff6b0';
+  hole([[0.22, 0.42], [0.42, 0.47], [0.3, 0.32]]); hole([[0.78, 0.42], [0.58, 0.47], [0.7, 0.32]]);
+  hole([[0.46, 0.56], [0.54, 0.56], [0.5, 0.5]]);
+  hole([[0.2, 0.62], [0.3, 0.7], [0.36, 0.64], [0.43, 0.73], [0.5, 0.66], [0.57, 0.73], [0.64, 0.64], [0.7, 0.7], [0.8, 0.62], [0.72, 0.84], [0.5, 0.88], [0.28, 0.84]]);
+});
+const ghostTex = ctex(512, 640, (x, W, H) => {
+  const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(240,245,255,0.95)'); g.addColorStop(1, 'rgba(200,215,240,0.0)');
+  x.fillStyle = g; x.beginPath(); x.moveTo(W * 0.15, H * 0.95);
+  x.bezierCurveTo(W * 0.1, H * 0.4, W * 0.2, H * 0.05, W * 0.5, H * 0.05); x.bezierCurveTo(W * 0.8, H * 0.05, W * 0.9, H * 0.4, W * 0.85, H * 0.95);
+  for (let k = 0; k < 5; k++) { const a = W * (0.85 - k * 0.14); x.quadraticCurveTo(a - W * 0.035, H * 0.82, a - W * 0.07, H * 0.95); x.quadraticCurveTo(a - W * 0.1, H * 1.0, a - W * 0.14, H * 0.95); }
+  x.closePath(); x.fill();
+  x.fillStyle = 'rgba(10,10,20,0.9)';
+  x.beginPath(); x.ellipse(W * 0.38, H * 0.3, W * 0.06, H * 0.07, 0, 0, 7); x.fill(); x.beginPath(); x.ellipse(W * 0.62, H * 0.3, W * 0.06, H * 0.07, 0, 0, 7); x.fill();
+  x.beginPath(); x.ellipse(W * 0.5, H * 0.45, W * 0.07, H * 0.09, 0, 0, 7); x.fill();
+});
+const batTex = ctex(256, 128, (x, W, H) => {
+  x.fillStyle = '#0b090d'; x.beginPath(); x.moveTo(W / 2, H * 0.45);
+  for (const s of [1, -1]) { x.moveTo(W / 2, H * 0.4); x.quadraticCurveTo(W / 2 + s * W * 0.2, H * 0.05, W / 2 + s * W * 0.48, H * 0.25); x.quadraticCurveTo(W / 2 + s * W * 0.38, H * 0.55, W / 2 + s * W * 0.3, H * 0.5); x.quadraticCurveTo(W / 2 + s * W * 0.2, H * 0.7, W / 2, H * 0.6); }
+  x.fill(); x.beginPath(); x.ellipse(W / 2, H * 0.5, W * 0.05, H * 0.2, 0, 0, 7); x.fill();
+});
+const figureTex = ctex(256, 512, (x, W, H) => {
+  x.filter = 'blur(3px)'; x.fillStyle = '#020203';
+  x.beginPath(); x.ellipse(W / 2, H * 0.12, W * 0.13, H * 0.075, 0, 0, 7); x.fill();                          // head
+  x.beginPath(); x.moveTo(W * 0.42, H * 0.18); x.lineTo(W * 0.58, H * 0.18); x.lineTo(W * 0.86, H * 0.3); x.lineTo(W * 0.92, H * 0.62); x.lineTo(W * 0.8, H * 0.64);
+  x.lineTo(W * 0.7, H * 0.4); x.lineTo(W * 0.68, H * 1.0); x.lineTo(W * 0.32, H * 1.0); x.lineTo(W * 0.3, H * 0.4); x.lineTo(W * 0.2, H * 0.64); x.lineTo(W * 0.08, H * 0.62); x.lineTo(W * 0.14, H * 0.3); x.closePath(); x.fill();
+});
+const eyesTex = ctex(128, 32, (x, W, H) => { x.shadowColor = '#ff2010'; x.shadowBlur = 10; x.fillStyle = '#ff5030'; x.beginPath(); x.ellipse(W * 0.35, H / 2, 6, 4, 0, 0, 7); x.ellipse(W * 0.65, H / 2, 6, 4, 0, 0, 7); x.fill(); });
+const holeTex = ctex(1024, 1024, (x, W, H) => {
+  // a broken hole in the tiles: jagged edge, shards, darkness with a faint sickly glow far down
+  const pts = []; for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2, r = W * (0.3 + 0.08 * Math.sin(k * 2.7) + Math.random() * 0.06); pts.push([W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r * 0.9]); }
+  x.save(); x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a, b) : x.moveTo(a, b)); x.closePath(); x.clip();
+  const g = x.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, W * 0.42);
+  g.addColorStop(0, '#000000'); g.addColorStop(0.55, '#020403'); g.addColorStop(0.85, '#0c1a0a'); g.addColorStop(1, '#1d2a14');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  for (let k = 0; k < 40; k++) { x.strokeStyle = `rgba(60,90,40,${Math.random() * 0.12})`; x.lineWidth = 2; x.beginPath(); x.arc(W / 2, H / 2, W * (0.08 + Math.random() * 0.3), Math.random() * 6, Math.random() * 6 + 1); x.stroke(); }
+  x.restore();
+  x.strokeStyle = '#151515'; x.lineWidth = 10; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(a, b) : x.moveTo(a, b)); x.closePath(); x.stroke();
+  for (let k = 0; k < 22; k++) {                                // tile shards round the edge
+    const [a, b] = pts[k % pts.length], s = 18 + Math.random() * 30, c = Math.random() < 0.5 ? '#e6e2d6' : '#1d1d1f';
+    x.fillStyle = c; x.beginPath(); x.moveTo(a + Math.random() * s, b); x.lineTo(a + s, b + Math.random() * s); x.lineTo(a, b + s); x.closePath(); x.fill();
+  }
+  for (let k = 0; k < 8; k++) { const [a, b] = pts[Math.floor(Math.random() * pts.length)]; x.strokeStyle = 'rgba(15,15,15,0.8)'; x.lineWidth = 3; x.beginPath(); x.moveTo(a, b);
+    let cx = a, cy = b; for (let j = 0; j < 6; j++) { cx += (cx - W / 2) * 0.12 + (Math.random() - 0.5) * 30; cy += (cy - H / 2) * 0.12 + (Math.random() - 0.5) * 30; x.lineTo(cx, cy); } x.stroke(); }   // cracks running out
+});
+const monsterEyes = ctex(256, 64, (x, W, H) => { x.shadowColor = '#d8ff40'; x.shadowBlur = 16; x.fillStyle = '#f0ff90';
+  for (const cx of [W * 0.33, W * 0.67]) { x.beginPath(); x.ellipse(cx, H / 2, 20, 9, 0, 0, 7); x.fill(); }
+  x.shadowBlur = 0; x.fillStyle = '#000'; for (const cx of [W * 0.33, W * 0.67]) { x.beginPath(); x.ellipse(cx, H / 2, 3, 8, 0, 0, 7); x.fill(); } });
+const clawTex = ctex(256, 384, (x, W, H) => {
+  x.fillStyle = '#1b2116'; x.beginPath(); x.ellipse(W / 2, H * 0.78, W * 0.26, H * 0.18, 0, 0, 7); x.fill();      // the back of the hand
+  for (const [dx, ln] of [[-0.2, 0.55], [-0.06, 0.66], [0.08, 0.62], [0.22, 0.48]]) {
+    x.strokeStyle = '#1b2116'; x.lineWidth = 26; x.lineCap = 'round'; x.beginPath(); x.moveTo(W / 2 + dx * W, H * 0.7);
+    x.quadraticCurveTo(W / 2 + dx * W * 1.4, H * (0.7 - ln * 0.6), W / 2 + dx * W * 1.2, H * (0.7 - ln)); x.stroke();
+    x.fillStyle = '#d8d2bc'; x.beginPath(); const tx = W / 2 + dx * W * 1.2, ty = H * (0.7 - ln); x.moveTo(tx - 9, ty + 6); x.lineTo(tx + 9, ty + 6); x.lineTo(tx + dx * 40, ty - 34); x.closePath(); x.fill();
+  }
+});
+const billboard = (tex, w, h, opts = {}) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0, ...opts }));
+  m.visible = false; scene.add(m); return m;
+};
+const faceEye = (m, upright = true) => { if (upright) { const t = EYE.clone(); t.y = m.position.y; m.lookAt(t); } else m.lookAt(EYE); };
+
+// ---- spiders (procedural 3D)
+const spiderMat = new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: 0.35, metalness: 0.1 });
+function makeSpider(size = 1) {
+  const g = new THREE.Group();
+  const abd = new THREE.Mesh(new THREE.SphereGeometry(0.065, 20, 14), spiderMat); abd.scale.set(1, 0.85, 1.25); abd.position.set(0, 0, 0.07); g.add(abd);
+  const ceph = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 12), spiderMat); ceph.position.set(0, 0, -0.03); g.add(ceph);
+  const red = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), new THREE.MeshBasicMaterial({ color: 0x8a0a06 })); red.position.set(0, 0.05, 0.08); g.add(red);
+  g.userData.legs = [];
+  for (let s of [-1, 1]) for (let i = 0; i < 4; i++) {
+    const hip = new THREE.Group(); hip.position.set(s * 0.03, 0, -0.04 + i * 0.022); g.add(hip);
+    const up = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.005, 0.11, 6), spiderMat); up.rotation.z = s * -1.0; up.position.set(s * 0.045, 0.03, 0); hip.add(up);
+    const knee = new THREE.Group(); knee.position.set(s * 0.09, 0.06, 0); hip.add(knee);
+    const lo = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.002, 0.14, 6), spiderMat); lo.rotation.z = s * 0.45; lo.position.set(s * 0.03, -0.065, 0); knee.add(lo);
+    hip.rotation.y = s * (-0.6 + i * 0.4);
+    g.userData.legs.push({ hip, knee, s, i });
+  }
+  g.scale.setScalar(size); g.visible = false; scene.add(g); return g;
+}
+function animateLegs(sp, t, speed = 1) {
+  for (const L of sp.userData.legs) {
+    const ph = t * 14 * speed + L.i * 1.7 + (L.s > 0 ? Math.PI : 0);
+    L.hip.rotation.x = Math.sin(ph) * 0.35 * speed; L.knee.rotation.z = L.s * (0.2 + Math.cos(ph) * 0.25 * speed);
+  }
+}
+const bigSpider = makeSpider(2.6);
+const thread = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.55 }));
+thread.visible = false; scene.add(thread);
+const swarm = Array.from({ length: 12 }, () => makeSpider(0.55));
+
+// ---- the door: a leaf hinged like the render's, swinging shut over the doorway
+let doorLeaf = null, doorOpen = 1, doorAnim = null;
+const DOOR_ANG = 78 * Math.PI / 180;
+if (DOOR && F.walls[DOOR.wall]) {
+  const [u0, u1] = span(DOOR), w = u1 - u0, h = +(DOOR.height ?? 2.0);
+  const T = 0.15, hinge = F.w2(DOOR.wall, u1, T, 0);
+  const geo = new THREE.BoxGeometry(w, h - 0.01, 0.04); geo.translate(-w / 2, (h - 0.01) / 2, 0.02);
+  doorLeaf = new THREE.Group(); doorLeaf.position.copy(b2t(...hinge));
+  const leaf = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xd8d6d0, roughness: 0.5 })); doorLeaf.add(leaf);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), new THREE.MeshStandardMaterial({ color: 0x8a8a86, metalness: 0.8, roughness: 0.3 }));
+  knob.position.set(-w + 0.07, 1.0, -0.03); doorLeaf.add(knob);
+  doorLeaf.userData.closed = { north: 0, south: 0, east: Math.PI / 2, west: Math.PI / 2 }[DOOR.wall];
+  doorLeaf.userData.swing = { north: -DOOR_ANG, south: DOOR_ANG, east: DOOR_ANG, west: -DOOR_ANG }[DOOR.wall];
+  doorLeaf.visible = false; scene.add(doorLeaf);
+}
+function setDoor(open) {
+  doorOpen = open;
+  if (!doorLeaf) return;
+  doorLeaf.rotation.y = doorLeaf.userData.closed + doorLeaf.userData.swing * open;
+  doorLeaf.visible = open < 0.999;                      // fully open: the render already shows the open leaf
+}
+
+// ---- sprites in the scene
+const pumpkinFace = billboard(evilPumpkin, 1, 1);
+const ghost = billboard(ghostTex, 0.9, 1.15, { opacity: 0 });
+const bats = Array.from({ length: 7 }, () => billboard(batTex, 0.32, 0.16, { opacity: 1 }));
+const figure = billboard(figureTex, 0.75, 1.8, { opacity: 0 });
+// the floor monster: a hole that is only there in the dark
+const flat = (tex, w, h, opts = {}) => { const m = billboard(tex, w, h, opts); m.rotation.x = -Math.PI / 2; return m; };
+const hole = flat(holeTex, 1.5, 1.5, { opacity: 0, color: 0x3a3a3a });          // dim: the room is dark
+const holeEyes = flat(monsterEyes, 0.32, 0.08, { opacity: 0, blending: THREE.AdditiveBlending });
+const claws = [0, 1].map(() => flat(clawTex, 0.3, 0.45, { opacity: 0, color: 0x707070 }));
+const figEyes = billboard(eyesTex, 0.22, 0.055, { opacity: 0, blending: THREE.AdditiveBlending });
+
+// ------------------------------------------------------------------ audio (all synthesised in the browser)
+let AC = null, master, wet, dry, noiseBuf, brownBuf, muted = false;
+function initAudio() {
+  if (AC) return; AC = new (window.AudioContext || window.webkitAudioContext)();
+  master = AC.createGain(); master.gain.value = 0.9;
+  const comp = AC.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6; master.connect(comp); comp.connect(AC.destination);
+  dry = AC.createGain(); dry.connect(master);
+  const conv = AC.createConvolver(); const len = AC.sampleRate * 2.6, ir = AC.createBuffer(2, len, AC.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+  conv.buffer = ir; wet = AC.createGain(); wet.gain.value = 0.55; conv.connect(wet); wet.connect(master); wet.input = conv;
+  noiseBuf = AC.createBuffer(1, AC.sampleRate * 4, AC.sampleRate); { const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  brownBuf = AC.createBuffer(1, AC.sampleRate * 6, AC.sampleRate); { const d = brownBuf.getChannelData(0); let l = 0; for (let i = 0; i < d.length; i++) { l = (l + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = l * 3.5; } }
+  const L = AC.listener;
+  if (L.positionX) { L.positionX.value = EYE.x; L.positionY.value = EYE.y; L.positionZ.value = EYE.z; L.forwardX.value = Math.sin(U.viewYaw.value); L.forwardY.value = 0; L.forwardZ.value = -Math.cos(U.viewYaw.value); L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+  else { L.setPosition(EYE.x, EYE.y, EYE.z); L.setOrientation(Math.sin(U.viewYaw.value), 0, -Math.cos(U.viewYaw.value), 0, 1, 0); }
+  ambience();
+}
+// an output chain at a position in the room (three coords), with some reverb
+function out(pos, gain = 1, rev = 0.5) {
+  const g = AC.createGain(); g.gain.value = gain;
+  let node = g;
+  if (pos) { const p = AC.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse'; p.refDistance = 1.2; p.rolloffFactor = 0.6;
+    if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else p.setPosition(pos.x, pos.y, pos.z);
+    g.connect(p); node = p; }
+  node.connect(dry); const s = AC.createGain(); s.gain.value = rev; node.connect(s); s.connect(wet.input);
+  return g;
+}
+const now = () => AC.currentTime;
+function noise(buf = noiseBuf, loop = false) { const s = AC.createBufferSource(); s.buffer = buf; s.loop = loop; s.loopStart = Math.random(); return s; }
+function filt(type, f, q = 1) { const b = AC.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; }
+function env(g, t, a, peak, hold, r) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.setValueAtTime(peak, t + a + hold); g.gain.exponentialRampToValueAtTime(0.0001, t + a + hold + r); }
+const R = (a, b) => a + Math.random() * (b - a);
+
+function ambience() {
+  // wind round the building
+  const w = noise(brownBuf, true), bp = filt('bandpass', 420, 0.6), wg = AC.createGain(); wg.gain.value = 0.22;
+  const lfo = AC.createOscillator(), lg = AC.createGain(); lfo.frequency.value = 0.07; lg.gain.value = 260; lfo.connect(lg); lg.connect(bp.frequency);
+  const lfo2 = AC.createOscillator(), lg2 = AC.createGain(); lfo2.frequency.value = 0.045; lg2.gain.value = 0.12; lfo2.connect(lg2); lg2.connect(wg.gain);
+  w.connect(bp); bp.connect(wg); wg.connect(out(U.flashDir.value.clone().multiplyScalar(4).add(EYE), 1, 0.3)); w.start(); lfo.start(); lfo2.start();
+  // a low unsettling drone
+  const o1 = AC.createOscillator(), o2 = AC.createOscillator(), dl = filt('lowpass', 150), dg = AC.createGain(); dg.gain.value = 0.045;
+  o1.type = o2.type = 'sawtooth'; o1.frequency.value = 55; o2.frequency.value = 55.6; o1.connect(dl); o2.connect(dl); dl.connect(dg); dg.connect(out(null, 1, 0.6)); o1.start(); o2.start();
+  const sub = AC.createOscillator(), sg = AC.createGain(); sub.frequency.value = 34; sg.gain.value = 0.05; sub.connect(sg); sg.connect(out(null, 1, 0.2)); sub.start();
+  // the grandfather clock ticking
+  if (CLOCK) { const cp = b2t(+CLOCK.x, +CLOCK.y, 1.4); let tick = 0;
+    setInterval(() => { if (!AC || muted) return; const t = now(), s = noise(), f = filt('bandpass', tick++ % 2 ? 2600 : 2100, 6), g = out(cp, 1, 0.35); s.connect(f); f.connect(g); env(g, t, 0.002, 0.25, 0.005, 0.05); s.start(t); s.stop(t + 0.1); }, 1000); }
+}
+const SFX = {
+  creak(pos = randWallPoint(), dur = R(1.2, 2.4)) {
+    const t = now(), o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.value = R(90, 160);
+    for (let k = 0; k < dur * 30; k++) o.frequency.setValueAtTime(Math.max(50, o.frequency.value * R(0.85, 1.18)), t + k / 30);
+    const bp = filt('bandpass', R(600, 900), 4), g = out(pos, 1, 0.5), am = AC.createGain();
+    for (let k = 0; k < dur * 25; k++) am.gain.setValueAtTime(Math.random() < 0.6 ? R(0.2, 1) : 0.05, t + k / 25);
+    o.connect(bp); bp.connect(am); am.connect(g); env(g, t, 0.05, 0.35, dur - 0.3, 0.25); o.start(t); o.stop(t + dur + 0.1);
+  },
+  groan(dur = 3) {
+    const t = now(), o = AC.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(48, t); o.frequency.linearRampToValueAtTime(36, t + dur);
+    const vib = AC.createOscillator(), vg = AC.createGain(); vib.frequency.value = 3.2; vg.gain.value = 3; vib.connect(vg); vg.connect(o.frequency);
+    const g = out(null, 1, 0.7); o.connect(g); env(g, t, 0.4, 0.5, dur - 1.0, 0.6); o.start(t); vib.start(t); o.stop(t + dur); vib.stop(t + dur);
+    const n = noise(brownBuf), lp = filt('lowpass', 110), ng = out(null, 1, 0.5); n.connect(lp); lp.connect(ng); env(ng, t, 0.6, 0.7, dur - 1.2, 0.6); n.start(t); n.stop(t + dur);
+    for (let k = 0; k < 3; k++) setTimeout(() => SFX.creak(randWallPoint(), R(0.8, 1.6)), k * 700 + 200);
+  },
+  slam(pos) {
+    const t = now(), n = noise(), lp = filt('lowpass', 1100), g = out(pos, 1, 0.9); n.connect(lp); lp.connect(g); env(g, t, 0.003, 1.4, 0.02, 0.35); n.start(t); n.stop(t + 0.5);
+    const o = AC.createOscillator(); o.frequency.setValueAtTime(85, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.4); const og = out(pos, 1, 0.8); o.connect(og); env(og, t, 0.003, 1.6, 0.03, 0.45); o.start(t); o.stop(t + 0.6);
+  },
+  knock(pos, n = 3) { for (let k = 0; k < n; k++) { const t = now() + k * 0.32 + (k === n - 1 ? 0.15 : 0); const o = AC.createOscillator(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.12);
+    const g = out(pos, 1, 0.6); o.connect(g); env(g, t, 0.002, 0.9, 0.01, 0.14); o.start(t); o.stop(t + 0.2); } },
+  step(pos, loud = 0.6) { const t = now(), n = noise(), lp = filt('lowpass', 380), g = out(pos, 1, 0.5); n.connect(lp); lp.connect(g); env(g, t, 0.004, loud, 0.02, 0.12); n.start(t); n.stop(t + 0.2);
+    const o = AC.createOscillator(); o.frequency.value = 70; const og = out(pos, 1, 0.4); o.connect(og); env(og, t, 0.004, loud * 0.8, 0.01, 0.1); o.start(t); o.stop(t + 0.15); },
+  whisper(pos = randWallPoint(), dur = 3) {
+    const t = now(), n = noise(noiseBuf, true), g = out(pos, 1, 0.6), am = AC.createGain(); am.gain.value = 0;
+    const fs = [filt('bandpass', 700, 8), filt('bandpass', 1300, 8), filt('bandpass', 2600, 6)];
+    fs.forEach(f => { n.connect(f); f.connect(am); for (let k = 0; k < dur * 8; k++) f.frequency.setValueAtTime(f.frequency.value * R(0.8, 1.25), t + k / 8); });
+    const hs = filt('highpass', 5000); n.connect(hs); const hg = AC.createGain(); hg.gain.value = 0; hs.connect(hg); hg.connect(g);
+    for (let k = 0; k < dur * 6; k++) { const on = Math.random() < 0.7; am.gain.setTargetAtTime(on ? R(0.6, 1.4) : 0, t + k / 6, 0.03); hg.gain.setTargetAtTime(Math.random() < 0.2 ? 0.25 : 0, t + k / 6, 0.02); }
+    am.connect(g); env(g, t, 0.2, 0.9, dur - 0.5, 0.3); n.start(t); n.stop(t + dur + 0.2);
+  },
+  heartbeat(dur = 8, from = 70, to = 130) {
+    let t = now(); const end = t + dur;
+    while (t < end) { const bpm = from + (to - from) * ((t - now()) / dur);
+      for (const [dt, f, v] of [[0, 55, 0.9], [0.16, 46, 0.6]]) { const o = AC.createOscillator(); o.frequency.value = f; const g = out(null, 1, 0.1); o.connect(g); env(g, t + dt, 0.01, v, 0.03, 0.12); o.start(t + dt); o.stop(t + dt + 0.2); }
+      t += 60 / bpm; }
+  },
+  scream(pos) {
+    const t = now(), g = out(pos, 1, 0.5), mix = AC.createGain(); mix.connect(g);
+    for (const det of [0, 7]) { const o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(520 + det, t); o.frequency.linearRampToValueAtTime(980 + det, t + 0.25); o.frequency.linearRampToValueAtTime(760, t + 1.2);
+      const v = AC.createOscillator(), vg = AC.createGain(); v.frequency.value = 7.5; vg.gain.value = 28; v.connect(vg); vg.connect(o.frequency);
+      for (const [f, q, a] of [[900, 6, 1], [1500, 8, 0.7], [2900, 9, 0.4]]) { const bp = filt('bandpass', f, q), ga = AC.createGain(); ga.gain.value = a; o.connect(bp); bp.connect(ga); ga.connect(mix); }
+      o.start(t); v.start(t); o.stop(t + 1.4); v.stop(t + 1.4); }
+    const n = noise(), hp = filt('highpass', 2500), ng = AC.createGain(); ng.gain.value = 0.25; n.connect(hp); hp.connect(ng); ng.connect(mix); n.start(t); n.stop(t + 1.3);
+    env(g, t, 0.02, 2.2, 0.8, 0.45);
+  },
+  hiss(pos, dur = 0.9) { const t = now(), n = noise(), hp = filt('highpass', 3500), g = out(pos, 1, 0.3); n.connect(hp); hp.connect(g); env(g, t, 0.05, 0.6, dur - 0.3, 0.25); n.start(t); n.stop(t + dur); },
+  skitter(pos, dur = 2, rate = 18) { for (let k = 0; k < dur * rate; k++) { const t = now() + k / rate + R(0, 0.03), n = noise(), bp = filt('bandpass', R(2500, 4500), 5), g = out(pos, 1, 0.2); n.connect(bp); bp.connect(g); env(g, t, 0.001, R(0.15, 0.4), 0.003, 0.02); n.start(t); n.stop(t + 0.05); } },
+  flutter(pos, dur = 2.5) { const t = now(), n = noise(noiseBuf, true), bp = filt('bandpass', 1100, 1.5), am = AC.createGain(), g = out(pos, 1, 0.4);
+    const l = AC.createOscillator(), lg = AC.createGain(); l.frequency.value = 17; lg.gain.value = 0.5; l.connect(lg); lg.connect(am.gain); am.gain.value = 0.5;
+    n.connect(bp); bp.connect(am); am.connect(g); env(g, t, 0.2, 0.5, dur - 0.5, 0.3); n.start(t); l.start(t); n.stop(t + dur); l.stop(t + dur); },
+  growl(pos, dur = 3) { const t = now(), o = AC.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(62, t); o.frequency.linearRampToValueAtTime(48, t + dur);
+    const am = AC.createGain(), l = AC.createOscillator(), lg = AC.createGain(); l.frequency.value = 23; lg.gain.value = 0.45; l.connect(lg); lg.connect(am.gain); am.gain.value = 0.55;
+    const bp = filt('bandpass', 320, 1.2), g = out(pos, 1, 0.5); o.connect(am); am.connect(bp); bp.connect(g);
+    const n = noise(), lp = filt('lowpass', 500), ng = AC.createGain(); ng.gain.value = 0.35; n.connect(lp); lp.connect(ng); ng.connect(am);
+    env(g, t, 0.6, 1.3, dur - 1.2, 0.6); o.start(t); l.start(t); n.start(t); o.stop(t + dur); l.stop(t + dur); n.stop(t + dur); },
+  moan(pos, dur = 4) { const t = now(), o = AC.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.linearRampToValueAtTime(150, t + dur);
+    const v = AC.createOscillator(), vg = AC.createGain(); v.frequency.value = 5; vg.gain.value = 6; v.connect(vg); vg.connect(o.frequency);
+    const lp = filt('lowpass', 650, 3), g = out(pos, 1, 0.8); o.connect(lp); lp.connect(g); env(g, t, 0.6, 0.6, dur - 1.4, 0.8); o.start(t); v.start(t); o.stop(t + dur); v.stop(t + dur); },
+  thunder(delay = 1.2, near = 0.6) {
+    const t = now() + delay, pos = U.flashDir.value.clone().multiplyScalar(6).add(EYE);
+    const c = noise(), hp = filt('highpass', 900), cg = out(pos, 1, 0.4); c.connect(hp); hp.connect(cg); env(cg, t, 0.005, 0.5 * near, 0.08, 0.5); c.start(t); c.stop(t + 1);
+    const r = noise(brownBuf), lp = filt('lowpass', 180), rg = out(pos, 1, 0.6); r.connect(lp); lp.connect(rg); rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(1.4 * near, t + 0.15); for (let k = 1; k < 8; k++) rg.gain.setTargetAtTime(R(0.3, 1.2) * near, t + k * 0.45, 0.2);
+    rg.gain.setTargetAtTime(0.0001, t + 3.6, 0.8); r.start(t); r.stop(t + 6);
+  },
+};
+function randWallPoint() { const a = Math.random() * Math.PI * 2; return b2t(Math.cos(a) * F.W / 2, Math.sin(a) * F.D / 2, R(0.5, 2)); }
+const sfx = (name, ...a) => { if (AC && !muted) try { SFX[name](...a); } catch (e) { console.warn(name, e); } };
+
+// ------------------------------------------------------------------ effects (each returns a duration; animate() runs them)
+const active = new Set();                                  // {update(t) -> false when finished}
+let lastFlash = -10;
+function run(fx) { fx.t0 = performance.now() / 1000; active.add(fx); }
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
+let lightTarget = 1, bulbFlicker = null;
+
+const FX = {
+  flicker(steps = 4) {                                     // the bulb failing: level changes at most ~2.5 times a second
+    const seq = []; let tt = 0; for (let k = 0; k < steps; k++) { seq.push([tt, k % 2 ? 1 : R(0.05, 0.35)]); tt += R(0.38, 0.7); } seq.push([tt, 1]);
+    sfx('creak', bulb.position.clone(), 0.6);
+    run({ update(t) { let v = 1; for (const [s, l] of seq) if (t >= s) v = l; lightTarget = v; return t < tt + 0.1; } });
+  },
+  blackout(dur = 4) {
+    run({ update(t) { lightTarget = t < 0.25 ? 1 - t / 0.25 : t < dur ? 0 : 1; if (t > dur && t < dur + 0.5 && Math.floor((t - dur) / 0.4) % 2 === 0) lightTarget = 0.4; return t < dur + 0.9; } });
+  },
+  lightning(opts = {}) {                                     // two flashes, 0.45 s apart (photosensitivity: <= 2 per second)
+    const tNow = performance.now() / 1000; if (tNow - lastFlash < 1.2) return; lastFlash = tNow;
+    const near = opts.near ?? R(0.5, 1);
+    sfx('thunder', R(0.7, 1.8) * (1.2 - near), near);
+    if (opts.figure && WINDOW) showFigure(opts.figure === 'near' ? 1.6 : 3.2);
+    run({ update(t) {
+      const f = (x, peak) => x < 0 ? 0 : x < 0.04 ? peak * x / 0.04 : peak * Math.exp(-(x - 0.04) / 0.09);
+      U.flash.value = Math.max(f(t, 1), f(t - 0.45, 0.65)); flashLight.intensity = U.flash.value * 4;
+      return t < 1.2 || (U.flash.value = 0, flashLight.intensity = 0, false);
+    } });
+  },
+  groan(strength = 0.5, dur = 2.5) { sfx('groan', dur + 1); shake(strength, dur); },
+  slam() { if (!doorLeaf) return; const p = doorLeaf.position.clone(); p.y = 1.2;
+    run({ update(t) { const k = Math.min(1, t / 0.32); setDoor(1 - k * k); if (k >= 1 && !this.done) { this.done = true; sfx('slam', p); shake(0.9, 0.8); } return t < 0.5; } }); },
+  creakOpen(dur = 7) { if (!doorLeaf) return; const p = doorLeaf.position.clone(); p.y = 1.2; sfx('creak', p, dur * 0.8); setTimeout(() => sfx('creak', p, 2), dur * 500);
+    const start = doorOpen; run({ update(t) { setDoor(start + (1 - start) * ease(t / dur)); return t < dur; } }); },
+  knock() { if (doorLeaf) sfx('knock', doorLeaf.position.clone().setY(1.3)); },
+  footsteps(from, to, n = 8, gap = 0.55) {
+    from = from || b2t(R(-2, 2), -F.D / 2 - 1.5, 2.6); to = to || b2t(R(-2, 2), F.D / 2 + 1, 2.6);
+    for (let k = 0; k < n; k++) setTimeout(() => sfx('step', from.clone().lerp(to, k / (n - 1)), 0.5 + 0.3 * (k / n)), k * gap * 1000);
+  },
+  whisper(side) { const a = side === 'left' ? -Math.PI / 2 : side === 'right' ? Math.PI / 2 : R(-3, 3);
+    sfx('whisper', EYE.clone().add(new THREE.Vector3(Math.sin(a) * 1.2, 0.3, -Math.cos(a) * 1.2)), R(2.5, 4)); },
+  heartbeat(dur = 8) { sfx('heartbeat', dur); },
+  pumpkin(i = Math.floor(Math.random() * PUMPKINS.length)) {   // the pumpkin flares, then its face lunges at you
+    const p = PUMPKINS[i % Math.max(1, PUMPKINS.length)] || b2t(0, F.D / 2, 0.8);
+    U.glowDir.value.copy(dirTo(p));
+    run({ update(t) {
+      if (t < 1.4) { U.glow.value = ease(t / 1.4) * (0.8 + 0.2 * Math.sin(t * 9)); return true; }
+      const k = t - 1.4;
+      if (!this.go) { this.go = true; sfx('scream', p); shake(0.7, 0.9); pumpkinFace.visible = true; }
+      const end = EYE.clone().add(dirTo(p).multiplyScalar(0.55)); end.y = EYE.y + 0.05;
+      const fly = ease(Math.min(1, k / 0.42));
+      pumpkinFace.position.copy(p).lerp(end, fly); pumpkinFace.scale.setScalar(0.35 + fly * 1.25); faceEye(pumpkinFace, false);
+      pumpkinFace.material.opacity = k < 1.1 ? 1 : Math.max(0, 1 - (k - 1.1) / 0.35);
+      U.glow.value = Math.max(0, 1 - k / 1.2);
+      if (k > 1.5) { pumpkinFace.visible = false; U.glow.value = 0; return false; }
+      return true;
+    } });
+  },
+  spider() {                                                 // a big spider drops on its thread in front of you, twitches, climbs away
+    const a = (+view.yaw || 0) * Math.PI / 180 + R(-0.9, 0.9), dist = 1.5;
+    const x = EYE.x + Math.sin(a) * dist, z = EYE.z - Math.cos(a) * dist, top = F.RH - 0.02, low = EYE.y - 0.05;
+    bigSpider.visible = thread.visible = true; bigSpider.rotation.set(Math.PI, 0, 0);
+    sfx('hiss', new THREE.Vector3(x, low, z), 1.0);
+    run({ update(t) {
+      let y;
+      if (t < 1.0) y = top - (top - low) * ease(t / 1.0) - Math.sin(t * 10) * 0.05 * (1 - t);
+      else if (t < 5.5) { y = low + Math.sin(t * 3) * 0.04; if (!this.sk && t > 2) { this.sk = true; sfx('skitter', new THREE.Vector3(x, y, z), 1.2, 22); } }
+      else y = low + (top - low) * ease((t - 5.5) / 2.2);
+      bigSpider.position.set(x, y, z); bigSpider.rotation.y = t * 0.6; animateLegs(bigSpider, t, t < 5.5 ? 1 : 1.6);
+      thread.geometry.setFromPoints([new THREE.Vector3(x, top, z), new THREE.Vector3(x, y + 0.1, z)]);
+      if (t > 7.8) { bigSpider.visible = thread.visible = false; return false; }
+      return true;
+    } });
+  },
+  swarm() {                                                  // spiders scuttle across the floor
+    const a = R(0, Math.PI * 2);
+    swarm.forEach((sp, i) => {
+      const off = R(-1.6, 1.6), start = new THREE.Vector3(Math.cos(a) * 3.6 + Math.sin(a) * off, 0.02, Math.sin(a) * 3.6 - Math.cos(a) * off).add(new THREE.Vector3(EYE.x, 0, EYE.z));
+      const end = new THREE.Vector3(-Math.cos(a) * 3.6 + Math.sin(a) * (off + R(-0.8, 0.8)), 0.02, -Math.sin(a) * 3.6 - Math.cos(a) * (off + R(-0.8, 0.8))).add(new THREE.Vector3(EYE.x, 0, EYE.z));
+      const delay = R(0, 1.5), dur = R(3.5, 5.5);
+      sp.visible = false;
+      run({ update(t) { const k = (t - delay) / dur; if (k < 0) return true; if (k > 1) { sp.visible = false; return false; }
+        sp.visible = true; sp.position.copy(start).lerp(end, k); sp.lookAt(end.x, 0.02, end.z); sp.rotateY(Math.PI); animateLegs(sp, t, 1.5); return true; } });
+    });
+    sfx('skitter', EYE.clone().setY(0.1), 5, 30);
+  },
+  ghost() {                                                  // drifts across the room in front of you
+    const a = (+view.yaw || 0) * Math.PI / 180 + R(-0.5, 0.5), side = Math.random() < 0.5 ? -1 : 1;
+    const c = EYE.clone().add(new THREE.Vector3(Math.sin(a) * 1.9, 0.35, -Math.cos(a) * 1.9)), across = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(side);
+    ghost.visible = true; sfx('moan', c, 5);
+    run({ update(t) { const k = t / 6.5; if (k > 1) { ghost.visible = false; return false; }
+      ghost.position.copy(c).addScaledVector(across, (k - 0.5) * 6).add(new THREE.Vector3(0, Math.sin(t * 2.2) * 0.12, 0));
+      ghost.material.opacity = 0.8 * Math.min(1, k * 5, (1 - k) * 5); faceEye(ghost); return true; } });
+  },
+  floorMonster(dur = 6) {                                   // lights out; a hole opens by your feet; eyes, claws, a growl; lights back, gone
+    const a = (+view.yaw || 0) * Math.PI / 180 + R(-0.6, 0.6), dist = R(0.85, 1.1);
+    const c = new THREE.Vector3(EYE.x + Math.sin(a) * dist, 0.004, EYE.z - Math.cos(a) * dist);
+    hole.position.copy(c); hole.rotation.z = R(0, 6); holeEyes.position.copy(c).add(new THREE.Vector3(0, 0.003, 0));
+    holeEyes.rotation.z = -a;                                // eyes look towards you
+    const toward = new THREE.Vector3(EYE.x - c.x, 0, EYE.z - c.z).normalize(), side = new THREE.Vector3(-toward.z, 0, toward.x);
+    hole.visible = holeEyes.visible = true; claws.forEach(cl => (cl.visible = true));
+    FX.blackout(dur);
+    run({ update(t) {
+      const dark = Math.max(0, Math.min(1, (0.4 - U.lightMix.value) / 0.3));
+      hole.material.opacity = dark;
+      const eyes = t > 1.2 ? (Math.floor(t * 1.7) % 5 === 0 ? 0.1 : 1) : 0;          // a slow blink now and then
+      holeEyes.material.opacity = dark * eyes * (0.7 + 0.3 * Math.sin(t * 5));
+      claws.forEach((cl, i) => {                             // two hands grip the edge and drag forward
+        const k = ease((t - 1.8 - i * 0.5) / 1.6), sgn = i ? 1 : -1;
+        cl.position.copy(c).addScaledVector(side, sgn * 0.32).addScaledVector(toward, 0.25 + k * 0.32).setY(0.006 + i * 0.001);
+        cl.rotation.z = Math.atan2(toward.x, toward.z) + Math.PI + sgn * 0.25;
+        cl.material.opacity = dark * (k > 0 ? 1 : 0);
+      });
+      if (!this.g && t > 1.6) { this.g = true; sfx('growl', c.clone().setY(0.2), 3); }
+      if (!this.s && t > 2.6) { this.s = true; sfx('creak', c.clone(), 1.2); }
+      if (t > dur + 1.2) { hole.visible = holeEyes.visible = false; claws.forEach(cl => (cl.visible = false)); return false; }
+      return true;
+    } });
+  },
+  bats() {
+    const a = R(0, Math.PI * 2);
+    bats.forEach((b, i) => {
+      const s = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), n = new THREE.Vector3(-s.z, 0, s.x), off = R(-1.5, 1.5);
+      const p0 = EYE.clone().addScaledVector(s, 3.6).addScaledVector(n, off).setY(R(1.75, 2.15)), p1 = EYE.clone().addScaledVector(s, -3.6).addScaledVector(n, off + R(-1, 1)).setY(R(1.75, 2.15));
+      const delay = R(0, 0.8), dur = R(1.8, 2.8);
+      run({ update(t) { const k = (t - delay) / dur; if (k < 0) return true; if (k > 1) { b.visible = false; return false; }
+        b.visible = true; b.position.copy(p0).lerp(p1, k).add(new THREE.Vector3(0, Math.sin(t * 9 + i) * 0.08, 0)); faceEye(b, false);
+        b.scale.set(0.6 + 0.4 * Math.abs(Math.sin(t * 22 + i)), 1, 1); return true; } });
+    });
+    sfx('flutter', EYE.clone().setY(2), 3);
+  },
+  shake(s = 0.5, d = 1.2) { shake(s, d); },
+};
+let shakeUntil = 0, shakeAmp = 0;
+function shake(strength = 0.5, dur = 1) { shakeAmp = Math.min(1, strength); shakeUntil = performance.now() / 1000 + Math.min(2, dur); }
+
+let figureUntil = 0;
+function showFigure(dist) {
+  const c = F.w2(WINDOW.wall, +WINDOW.pos + R(-0.2, 0.2), 0.15 + dist, 0);
+  figure.position.copy(b2t(c[0], c[1], 0.9)); figure.visible = figEyes.visible = true; faceEye(figure);
+  figEyes.position.copy(b2t(c[0], c[1], 1.6)); faceEye(figEyes);
+  figure.position.addScaledVector(dirTo(figure.position).negate(), 0); figureUntil = performance.now() / 1000 + 7;
+}
+
+// ------------------------------------------------------------------ the cycle (about 8 minutes, then it loops)
+const TIMELINE = [
+  [12, 'creak'], [25, 'flicker', 3], [40, 'footsteps'], [55, 'lightning'], [70, 'groan', 0.4], [88, 'whisper', 'left'], [100, 'bats'],
+  [118, 'creak'], [128, 'knock'], [140, 'slam'], [160, 'flicker', 4], [178, 'lightning', { figure: 'far' }], [195, 'heartbeat', 9],
+  [204, 'pumpkin', 0], [230, 'creak'], [240, 'spider'], [262, 'whisper', 'right'], [275, 'floorMonster', 6], [276, 'whisper'],
+  [278, 'footsteps', null, null, 6, 0.5], [300, 'ghost'], [322, 'groan', 0.9, 2], [340, 'lightning', { figure: 'near', near: 1 }],
+  [356, 'creakOpen', 7], [372, 'footsteps'], [388, 'heartbeat', 8], [396, 'swarm'], [425, 'flicker', 3], [428, 'bats'],
+  [445, 'lightning', { near: 1 }], [455, 'heartbeat', 6], [458, 'floorMonster', 5], [466, 'pumpkin', 1],
+].filter(e => e[0] < CYCLE).sort((a, b) => a[0] - b[0]);
+let cycleStart = 0, nextIdx = 0;
+function trigger(name, ...args) {
+  if (name === 'creak' || name === 'whisper' || name === 'heartbeat') { if (name === 'creak') sfx('creak'); else FX[name](...args); return; }
+  FX[name]?.(...args);
+}
+
+// ------------------------------------------------------------------ main loop
+let started = false;
+function frame() {
+  requestAnimationFrame(frame);
+  const T = performance.now() / 1000;
+  if (started && auto) {
+    let ct = T - cycleStart;
+    if (ct >= CYCLE) { cycleStart = T; ct = 0; nextIdx = 0; if (doorOpen < 1) setDoor(1); }
+    while (nextIdx < TIMELINE.length && TIMELINE[nextIdx][0] <= ct) { const [, n, ...a] = TIMELINE[nextIdx++]; trigger(n, ...a); }
+    if (hudOn) { const nx = TIMELINE[nextIdx]; hud.hidden = false; hud.textContent = `Halloween cycle ${fmt(ct)} / ${fmt(CYCLE)}${nx ? `   next: ${nx[1]} in ${Math.ceil(nx[0] - ct)} s` : ''}${muted ? '   (muted)' : ''}`; }
+  } else if (hudOn && started) { hud.hidden = false; hud.textContent = `Auto off: keys 1–9, 0, F${muted ? '   (muted)' : ''}`; }
+  for (const fx of [...active]) { if (fx.update(T - fx.t0) === false) active.delete(fx); }
+  // the bulb: ease towards its target level, plus a faint hum wobble
+  U.lightMix.value += (lightTarget - U.lightMix.value) * 0.35;
+  U.bright.value = 1;
+  amb.intensity = 0.06 + 0.35 * U.lightMix.value + U.flash.value * 0.8; bulb.intensity = 3 * U.lightMix.value;
+  // shake: small, fast, short
+  if (T < shakeUntil) { const k = (shakeUntil - T) / 2, a = shakeAmp * Math.min(1, k * 3) * 0.012;
+    U.shake.value.set((Math.sin(T * 47) + Math.sin(T * 29.3)) * a, (Math.sin(T * 39.7) + Math.cos(T * 23.1)) * a * 0.6); } else U.shake.value.set(0, 0);
+  // the figure outside: seen in lightning, eyes faint in between
+  if (figure.visible) { const left = figureUntil - T; if (left <= 0) { figure.visible = figEyes.visible = false; }
+    else { figure.material.opacity = Math.min(1, U.flash.value * 1.5); figEyes.material.opacity = (0.35 + 0.65 * (Math.sin(T * 1.3) * 0.5 + 0.5)) * Math.min(1, left) * (1 - U.flash.value); } }
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(0x000000, 0);
+  cubeCam.update(renderer, scene);
+  renderer.render(compScene, compCam);
+}
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function start() {
+  if (started) { initAudio(); AC?.resume(); return; }
+  started = true; document.getElementById('start').style.display = 'none'; cycleStart = performance.now() / 1000;
+  initAudio(); AC.resume();
+}
+document.getElementById('start').addEventListener('click', start);
+addEventListener('keydown', e => {
+  if (!started) { start(); return; }
+  AC?.resume();
+  const k = e.key.toLowerCase();
+  const map = { '1': () => FX.pumpkin(), '2': () => FX.spider(), '3': () => FX.ghost(), '4': () => (doorOpen > 0.5 ? FX.slam() : FX.creakOpen(4)),
+    '5': () => FX.lightning({ figure: 'near', near: 1 }), '6': () => FX.groan(0.8, 2), '7': () => FX.blackout(4), '8': () => FX.swarm(), '9': () => FX.bats(),
+    '0': () => FX.whisper(), 'f': () => FX.flicker(4), 'j': () => FX.floorMonster(6), 'k': () => FX.knock(), 'a': () => { auto = !auto; cycleStart = performance.now() / 1000; nextIdx = 0; },
+    'm': () => { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.9; }, 'h': () => { hudOn = !hudOn; hud.hidden = !hudOn; } };
+  map[k]?.();
+});
+if (P.get('autostart') === '1') { start(); }
+window.__halloween = { FX, setDoor, U, scene, cubeCam, cubeRT, room, EYE, THREE };                    // for testing
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

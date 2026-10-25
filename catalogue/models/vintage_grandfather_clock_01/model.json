@@ -1,0 +1,33 @@
+{
+  "id": "vintage_grandfather_clock_01",
+  "name": "Vintage Grandfather Clock 01",
+  "file": "vintage_grandfather_clock_01.gltf",
+  "thumb": "thumb.png",
+  "category": "electronics",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "vintage",
+    "antique",
+    "fancy",
+    "time",
+    "clock",
+    "old",
+    "wooden",
+    "ornate"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 12604,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Yann Kervran, James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/vintage_grandfather_clock_01",
+    "credit_required": false
+  }
+}

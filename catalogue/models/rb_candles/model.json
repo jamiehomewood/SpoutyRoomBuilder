@@ -1,0 +1,28 @@
+{
+  "id": "rb_candles",
+  "name": "Candles (lit)",
+  "file": "rb_candles.glb",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "halloween",
+    "candle",
+    "light"
+  ],
+  "status": "untested",
+  "notes": "Three lit church candles on a pewter dish.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

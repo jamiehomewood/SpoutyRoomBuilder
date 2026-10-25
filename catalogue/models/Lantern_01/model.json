@@ -1,0 +1,37 @@
+{
+  "id": "Lantern_01",
+  "name": "Lantern 01",
+  "file": "Lantern_01.gltf",
+  "thumb": "thumb.png",
+  "category": "lighting",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "prop",
+    "metal",
+    "glass",
+    "lantern",
+    "antique",
+    "vintage",
+    "hurricane",
+    "lamp",
+    "bronze",
+    "oldfashioned",
+    "brass",
+    "copper"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 33902,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rajil Jose Macatangay",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/Lantern_01",
+    "credit_required": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "rb_jack_o_lantern",
+  "name": "Jack-o'-lantern (lit)",
+  "file": "rb_jack_o_lantern.glb",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "halloween",
+    "pumpkin",
+    "seasonal"
+  ],
+  "status": "untested",
+  "notes": "Carved pumpkin with a glowing face on the -Y side. About 0.35 m across.",
+  "scale": 1.0,
+  "polycount": null,
+  "licence": {
+    "source": "Room Builder",
+    "author": "Own model (made for Room Builder)",
+    "licence": "Own work",
+    "licence_url": "",
+    "url": "",
+    "credit_required": false
+  }
+}

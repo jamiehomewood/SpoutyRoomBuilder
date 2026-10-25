@@ -1,0 +1,32 @@
+{
+  "id": "GothicCabinet_01",
+  "name": "Gothic Cabinet 01",
+  "file": "GothicCabinet_01.gltf",
+  "thumb": "thumb.png",
+  "category": "tables",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "vintage",
+    "wood",
+    "gothic",
+    "furniture",
+    "table",
+    "shelf",
+    "decorative"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 12170,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Kirill Sannikov",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/GothicCabinet_01",
+    "credit_required": false
+  }
+}

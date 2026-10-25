@@ -1,0 +1,32 @@
+{
+  "id": "wine_bottles_01",
+  "name": "Wine Bottles 01",
+  "file": "wine_bottles_01.gltf",
+  "thumb": "thumb.png",
+  "category": "clutter",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "wine",
+    "drink",
+    "bottle",
+    "champagne",
+    "grape",
+    "farmhouse",
+    "vineyard"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 28848,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "Rico Cilliers, Jurita Burger",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/wine_bottles_01",
+    "credit_required": false
+  }
+}

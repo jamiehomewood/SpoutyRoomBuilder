@@ -1,0 +1,37 @@
+{
+  "id": "ornate_mirror_01",
+  "name": "Ornate Mirror 01",
+  "file": "ornate_mirror_01.gltf",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "decor",
+    "decoration",
+    "ornate",
+    "fancy",
+    "wealthy",
+    "mansion",
+    "manor",
+    "vintage",
+    "victorian",
+    "floral",
+    "gold",
+    "mirror"
+  ],
+  "status": "untested",
+  "notes": "",
+  "scale": 1.0,
+  "polycount": 14246,
+  "licence": {
+    "source": "Poly Haven",
+    "author": "James Ray Cock",
+    "licence": "CC0",
+    "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "url": "https://polyhaven.com/a/ornate_mirror_01",
+    "credit_required": false
+  }
+}

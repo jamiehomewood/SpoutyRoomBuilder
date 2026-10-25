@@ -1497,6 +1497,8 @@ for it in SPEC.get("items", []):
         import traceback; traceback.print_exc(); log("item failed", it.get("model"), e)
 
 # ============================================================== lighting
+LIGHT_LEVEL = float(SPEC.get("light_level", 1.0))
+
 def downlights(n_target_spacing=1.6, energy=70):
     nx = max(1, round(W / n_target_spacing)); ny = max(1, round(D / n_target_spacing))
     disc = flat("Downlight_emit", (1, 1, 1), 0.5, emit=(1.0, 0.95, 0.85), strength=25)
@@ -1511,17 +1513,18 @@ def downlights(n_target_spacing=1.6, energy=70):
             cylinder_obj(f"Downlight_ring_{i}_{j}", 0.05, 0.006, (x, y, RH - 0.003), ring, verts=24, cname="Lights")
             cylinder_obj(f"Downlight_disc_{i}_{j}", 0.035, 0.004, (x, y, RH - 0.006), disc, verts=24, cname="Lights")
 
-def pendant(energy=60):
+def pendant(energy=60, on=True):
     """A dated flush 'dome' ceiling light: a frosted glass dome with a warm bulb behind it. It sits off the zenith
     (straight above the camera an equirect smears it into a band across the top of the image)."""
     cx, cy = 0.0, min(0.9, D / 4)
-    glow = flat("Dome_glass", (1, 1, 1), 0.4, emit=(1.0, 0.82, 0.6), strength=2.0)
+    glow = flat("Dome_glass", (1, 1, 1), 0.4, emit=(1.0, 0.82, 0.6), strength=2.0 * LIGHT_LEVEL) if on else flat("Dome_glass_off", (0.85, 0.83, 0.78), 0.35)
     rim = flat("Dome_rim", (0.6, 0.55, 0.42), 0.5)
     cylinder_obj("Dome_rim", 0.21, 0.012, (cx, cy, RH - 0.006), rim, verts=48, cname="Lights")
     bpy.ops.mesh.primitive_uv_sphere_add(radius=0.2, location=(cx, cy, RH - 0.012), segments=48, ring_count=24)
     d = bpy.context.active_object; d.name = "Dome_glass"; d.scale = (1, 1, 0.35); d.data.materials.append(glow); put(d, "Lights")
     d.visible_shadow = False
     for p_ in d.data.polygons: p_.use_smooth = True
+    if not on: return                                 # switched off: the fitting is there, unlit
     bpy.ops.object.light_add(type="POINT", location=(cx, cy, RH - 0.15))
     l = bpy.context.active_object; l.name = "Dome_light"; l.data.energy = energy; l.data.color = (1.0, 0.78, 0.5)
     l.data.shadow_soft_size = 0.15; put(l, "Lights")
@@ -1551,7 +1554,9 @@ else:                                              # offline fallback: a plain s
         except Exception: pass
     wn.links.new(sky.outputs[0], bg.inputs[0]); bg.inputs[1].default_value = 0.35
 
-lights_on = LIGHTING in ("dusk", "night") or SPEC.get("lights_on", True)
+# room lights: on unless the spec says "lights_on": false (e.g. a lights-off version of a scene to cross-fade with);
+# "light_level" dims or brightens them (1 = normal). The camera exposure stays the same either way.
+lights_on = bool(SPEC.get("lights_on", True))
 if OUTDOOR:
     pass
 elif CUSTODY:                                       # one recessed anti-ligature light, off the zenith
@@ -1568,9 +1573,9 @@ elif HOSPITAL:
     for i, (fx, fy) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
         panel_light(f"Panel_{i}", Vector((fx * W / 4, fy * D / 4, 0)), along_x=True, energy=65 if LIGHTING == "day" else 90)
 elif not NEGLECT:
-    if lights_on: downlights(energy=70 if LIGHTING == "day" else 90)
+    if lights_on: downlights(energy=(70 if LIGHTING == "day" else 90) * LIGHT_LEVEL)
 else:
-    pendant(energy=55 if LIGHTING == "day" else 80)
+    pendant(energy=(55 if LIGHTING == "day" else 80) * LIGHT_LEVEL, on=lights_on)
 
 # ============================================================== render settings
 sc.render.engine = "CYCLES"
@@ -1596,7 +1601,7 @@ try:
     sc.view_settings.view_transform = "AgX"
 except Exception: pass
 sc.view_settings.exposure = {"day": 0.6, "dusk": 0.9, "night": 0.9}.get(LIGHTING, 0.6) + (0.35 if NEGLECT else {"worn": 0.1, "neglected": 0.25, "derelict": 0.35}.get(CONDITION, 0.0)) - (0.5 if HOSPITAL else 0.0) \
-    - (0.55 if COURT else 0.0) - (0.4 if CUSTODY else 0.0)
+    - (0.55 if COURT else 0.0) - (0.4 if CUSTODY else 0.0) + float(SPEC.get("render", {}).get("exposure", 0))
 if OUTDOOR: sc.view_settings.exposure = {"day": 0.0, "dusk": 0.5, "night": 1.0}.get(LIGHTING, 0.0) + float(SPEC.get("render", {}).get("exposure", 0))
 sc.render.film_transparent = False
 

@@ -26,6 +26,19 @@ def mat(name, color, rough=0.5, metal=0.0, coat=0.0):
     m.diffuse_color = (*color, 1)
     return m
 
+def emat(name, color, strength=6.0):
+    """A glowing material (candle flames, a lit pumpkin face). Exported as glTF emissive with strength."""
+    m = bpy.data.materials.get(name)
+    if m: return m
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    b = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    b.inputs["Base Color"].default_value = (*color, 1)
+    for k in ("Emission Color", "Emission"):
+        if k in b.inputs: b.inputs[k].default_value = (*color, 1); break
+    b.inputs["Emission Strength"].default_value = strength
+    m.diffuse_color = (*color, 1)
+    return m
+
 def link(o):
     bpy.context.scene.collection.objects.link(o); return o
 
@@ -488,6 +501,65 @@ def park_sign(m):
     for k in range(5): box(f"line{k}", (0.8 - (k % 2) * 0.2, 0.004, 0.025), (-0.05, -0.073, 1.55 - k * 0.08), mat("Sign_text_grey", (0.3, 0.3, 0.3), 0.6), bevel=0)
     box("cap", (1.3, 0.12, 0.05), (0, -0.03, 1.85), p["green"], bevel=0.01)
 
+# ------------------------------------------------------------------ Halloween
+def prism(name, pts2d, y0, y1, m):
+    """A flat shape (list of (x, z)) extruded along Y from y0 to y1."""
+    me = bpy.data.meshes.new(name); bm = bmesh.new()
+    front = [bm.verts.new((x, y0, z)) for x, z in pts2d]; back = [bm.verts.new((x, y1, z)) for x, z in pts2d]
+    bm.faces.new(front); bm.faces.new(list(reversed(back)))
+    n = len(pts2d)
+    for i in range(n): bm.faces.new((front[i], front[(i + 1) % n], back[(i + 1) % n], back[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me); bm.free(); me.materials.append(m)
+    return link(bpy.data.objects.new(name, me))
+
+def jack_o_lantern(m):
+    """A carved pumpkin, lit from inside: ribbed orange body, stem, and a glowing face (triangle eyes and nose, toothy grin)
+    on the -Y side that follows the curve of the skin."""
+    orange = mat("Pumpkin_skin", (0.62, 0.17, 0.01), 0.55); stem = mat("Pumpkin_stem", (0.12, 0.09, 0.03), 0.8)
+    glow = emat("Pumpkin_glow", (1.0, 0.45, 0.06), 12.0)
+    R, H = 0.17, 0.26
+    def rad(z):                                         # radius of the body at height z (without ribs)
+        zs = max(-1.0, min(1.0, z / H * 2 - 1)); return R * math.sqrt(max(0.0, 1 - zs * zs)) * (1 - 0.18 * abs(zs) ** 3)
+    me = bpy.data.meshes.new("pumpkin"); bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=1.0)
+    for v in bm.verts:
+        a = math.atan2(v.co.y, v.co.x); rib = 1 + 0.05 * math.cos(10 * a)
+        zs = v.co.z; flat = 1 - 0.18 * abs(zs) ** 3
+        v.co.x *= R * rib * flat; v.co.y *= R * rib * flat; v.co.z = (zs * 0.5 + 0.5) * H
+    bm.to_mesh(me); bm.free()
+    for p in me.polygons: p.use_smooth = True
+    me.materials.append(orange); link(bpy.data.objects.new("pumpkin", me))
+    cyl("stem", 0.018, 0.07, (0.005, 0, H + 0.02), stem, r2=0.012)
+    def face_piece(name, pts):
+        """A glowing shape on the front: its front face sits on the skin, its back sinks into the pumpkin."""
+        me = bpy.data.meshes.new(name); bm = bmesh.new()
+        fr = [bm.verts.new((x, -math.sqrt(max(1e-6, (rad(z) * 1.065) ** 2 - x * x)), z)) for x, z in pts]   # just outside the ribs
+        bk = [bm.verts.new((x, -rad(z) * 0.55, z)) for x, z in pts]
+        bm.faces.new(fr); bm.faces.new(list(reversed(bk)))
+        n = len(pts)
+        for i in range(n): bm.faces.new((fr[i], fr[(i + 1) % n], bk[(i + 1) % n], bk[i]))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(me); bm.free(); me.materials.append(glow)
+        link(bpy.data.objects.new(name, me))
+    for sx in (-1, 1):
+        face_piece(f"eye{sx}", [(sx * 0.025, 0.155), (sx * 0.085, 0.155), (sx * 0.055, 0.2)])
+    face_piece("nose", [(-0.016, 0.125), (0.016, 0.125), (0, 0.148)])
+    face_piece("mouth", [(-0.095, 0.105), (-0.06, 0.088), (-0.042, 0.1), (-0.025, 0.082), (0.0, 0.094), (0.025, 0.082), (0.042, 0.1), (0.06, 0.088), (0.095, 0.105),
+                         (0.07, 0.065), (0.035, 0.056), (0.0, 0.052), (-0.035, 0.056), (-0.07, 0.065)])
+
+def candles(m):
+    """Three church candles of different heights, lit, with wax drips, on a small dish."""
+    wax = mat("Candle_wax", (0.82, 0.76, 0.6), 0.6); flame = emat("Candle_flame", (1.0, 0.62, 0.2), 20.0)
+    dish = mat("Candle_dish_pewter", (0.35, 0.35, 0.34), 0.35, 0.8)
+    cyl("dish", 0.15, 0.015, (0, 0, 0.0075), dish, verts=40)
+    for i, (x, y, r, h) in enumerate(((-0.05, 0.02, 0.035, 0.22), (0.045, 0.03, 0.03, 0.15), (0.0, -0.05, 0.028, 0.1))):
+        cyl(f"candle{i}", r, h, (x, y, 0.015 + h / 2), wax, verts=28)
+        for k in range(3):
+            a = k * 2.1 + i
+            cyl(f"drip{i}_{k}", 0.006, 0.04 + 0.02 * k, (x + math.cos(a) * r * 0.98, y + math.sin(a) * r * 0.98, 0.015 + h - 0.02 - 0.01 * k), wax, verts=8)
+        cyl(f"wick{i}", 0.0015, 0.012, (x, y, 0.015 + h + 0.006), mat("Wick", (0.02, 0.02, 0.02), 0.9), verts=6)
+        cyl(f"flame{i}", 0.007, 0.03, (x, y, 0.015 + h + 0.025), flame, verts=12, r2=0.0005)
+
 MODELS = {
     "rb_hospital_bed": ("Hospital bed", hospital_bed, "beds", "Profiling hospital bed, back raised, made up with sheet, pillow and folded cellular blanket. Head end at +Y (against the wall). 2.15 x 1.0 m."),
     "rb_bedside_locker": ("Bedside locker", bedside_locker, "storage", "Ward bedside cabinet on castors with water jug and cup."),
@@ -511,6 +583,8 @@ MODELS = {
     "rb_litter_bin": ("Litter bin (UK)", litter_bin, "outdoor", "Black street bin with gold band.", {"styles": ["outdoor"], "tags": ["park", "bin", "uk"]}),
     "rb_dog_bin": ("Dog-waste bin", dog_bin, "outdoor", "Red dog-waste bin on a post. Opening faces -Y.", {"styles": ["outdoor"], "tags": ["park", "bin", "uk"]}),
     "rb_park_sign": ("Park noticeboard", park_sign, "outdoor", "Green noticeboard on two posts. Faces -Y.", {"styles": ["outdoor"], "tags": ["park", "sign", "uk"]}),
+    "rb_jack_o_lantern": ("Jack-o'-lantern (lit)", jack_o_lantern, "decor", "Carved pumpkin with a glowing face on the -Y side. About 0.35 m across.", {"styles": ["modern", "neglected"], "tags": ["halloween", "pumpkin", "seasonal"]}),
+    "rb_candles": ("Candles (lit)", candles, "decor", "Three lit church candles on a pewter dish.", {"styles": ["modern", "neglected"], "tags": ["halloween", "candle", "light"]}),
 }
 
 def clear():
