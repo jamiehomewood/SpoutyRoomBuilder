@@ -46,7 +46,40 @@ export function styleColours(style) {
         ktop: 0xd2d0ca, splash: 0xd8ddd9, frame: 0xf0f0ee, door: 0xe8e8e4, glass: 0xbfd8e8, shelf: 0x7a5534, fridge: 0xa8a8a6 };
 }
 
-function mats(style) {
+// ------------------------------------------------------------------ finishes (a flat colour per finish for the live preview)
+const WOOD_HEX = { light_oak: 0xd9c4a3, oak: 0xa87a4a, dark_oak: 0x5a3d26, pine: 0xd8b07a, grey: 0xa8a49c };
+const BRICK_HEX = { red: 0x8a4a36, yellow: 0xb39a6a, painted: 0xe6e4dc };
+const COND_SHADE = { new: 1, lived_in: 0.97, worn: 0.9, neglected: 0.78, derelict: 0.66 };
+const hexNum = h => parseInt(String(h || '#888888').replace('#', ''), 16);
+function mixHex(a, b, t) {
+  const ca = new THREE.Color(a), cb = new THREE.Color(b); return ca.lerp(cb, t).getHex();
+}
+export function finishColour(f) {
+  if (!f) return null;
+  switch (f.type) {
+    case 'paint': case 'blockwork': case 'vinyl': case 'resin': case 'lino': case 'carpet':
+      return f.type === 'carpet' && f.carpet_pattern === 'patterned' && f.colour2 ? mixHex(hexNum(f.colour), hexNum(f.colour2), 0.25) : hexNum(f.colour);
+    case 'wallpaper': return f.pattern === 'woodchip' ? hexNum(f.colour) : mixHex(hexNum(f.colour), hexNum(f.colour2 || f.colour), f.pattern === 'vintage' ? 0.15 : 0.3);
+    case 'tiles': return f.colour2 ? mixHex(hexNum(f.colour), hexNum(f.colour2), 0.5) : hexNum(f.colour);
+    case 'wood': case 'laminate': case 'panelling': return f.wood === 'painted' ? hexNum(f.colour) : (WOOD_HEX[f.wood] ?? WOOD_HEX.oak);
+    case 'brick': return BRICK_HEX[f.brick] ?? BRICK_HEX.red;
+    case 'plaster': return 0xb89a86;
+    case 'concrete': return 0x5a5955;
+    case 'artex': return hexNum(f.colour);
+    default: return f.colour ? hexNum(f.colour) : null;
+  }
+}
+function finishMat(f, cond, fallback) {
+  const c = finishColour(f); if (c == null) return fallback;
+  const col = new THREE.Color(c).multiplyScalar(COND_SHADE[cond] ?? 1);
+  return new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, side: THREE.DoubleSide });
+}
+
+// a run-down home (neglected / derelict condition): bare bulb, nets, dated kitchen, like the old "neglected" style
+export const runDown = spec => spec?.style === 'neglected' || ((spec?.style || 'modern') === 'modern' && ['neglected', 'derelict'].includes(spec?.condition));
+
+function mats(style, spec) {
+  const rd = runDown(spec);
   const c = styleColours(style);
   const m = {};
   for (const [k, v] of Object.entries(c)) {
@@ -55,12 +88,33 @@ function mats(style) {
   }
   m.dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
   m.frosted = new THREE.MeshStandardMaterial({ color: 0xe8eef0, roughness: 0.6, transparent: true, opacity: 0.85 });
-  m.blind = new THREE.MeshStandardMaterial({ color: style === 'neglected' ? 0xc4bc9e : 0xdcdedb, roughness: 0.5 });
-  m.curtain = new THREE.MeshStandardMaterial({ color: style === 'neglected' ? 0x734720 : style === 'hospital' ? 0x5c8ca8 : 0x8c877a, roughness: 0.9 });
+  m.blind = new THREE.MeshStandardMaterial({ color: rd ? 0xc4bc9e : 0xdcdedb, roughness: 0.5 });
+  m.curtain = new THREE.MeshStandardMaterial({ color: rd ? 0x734720 : style === 'hospital' ? 0x5c8ca8 : 0x8c877a, roughness: 0.9 });
   m.nets = new THREE.MeshStandardMaterial({ color: 0xf0eee4, roughness: 1, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
   m.outside = new THREE.MeshBasicMaterial({ color: 0x8fb36b, side: THREE.DoubleSide });
   m.sky = new THREE.MeshBasicMaterial({ color: 0xbcd6ee, side: THREE.DoubleSide });
   m.night = new THREE.MeshBasicMaterial({ color: 0x0b1020, side: THREE.DoubleSide });
+  const fin = spec?.finishes, cond = spec?.condition || 'new';
+  if (fin) {
+    m.wall = finishMat(fin.walls, cond, m.wall);
+    m.floor = finishMat(fin.floor, cond, m.floor);
+    m.ceiling = fin.ceiling?.type === 'tiles' ? m.ceiling : finishMat(fin.ceiling, cond, m.ceiling);
+    m.trim = fin.trim ? finishMat(fin.trim.wood ? { type: 'wood', wood: fin.trim.wood } : { type: 'paint', colour: fin.trim.colour }, cond, m.trim) : m.trim;
+    m.lowerFin = fin.lower && fin.lower.type !== 'none' ? fin.lower : null;
+    m.lower = m.lowerFin ? finishMat(m.lowerFin.type === 'panelling' ? { type: 'wood', wood: m.lowerFin.wood, colour: m.lowerFin.colour } : m.lowerFin, cond, m.wall) : null;
+    // per-wall and per-alcove overrides: {walls, lower}; missing parts are inherited
+    const set = (ov, base) => {
+      if (!ov || (!ov.walls && !('lower' in ov))) return base;
+      const lf = 'lower' in ov ? (ov.lower && ov.lower.type !== 'none' ? ov.lower : null) : base.lowerFin;
+      return { wall: ov.walls ? finishMat(ov.walls, cond, base.wall) : base.wall, lowerFin: lf,
+               lower: lf ? finishMat(lf.type === 'panelling' ? { type: 'wood', wood: lf.wood, colour: lf.colour } : lf, cond, base.wall) : null };
+    };
+    const room = { wall: m.wall, lower: m.lower, lowerFin: m.lowerFin };
+    m.wallSet = Object.fromEntries(['north', 'south', 'east', 'west'].map(w => [w, set(spec.wall_finishes?.[w], room)]));
+    m.alcoveSet = ft => set(ft.finish, m.wallSet[ft.wall] || room);
+  }
+  m.wallSet ||= Object.fromEntries(['north', 'south', 'east', 'west'].map(w => [w, { wall: m.wall, lower: null, lowerFin: null }]));
+  m.alcoveSet ||= ft => m.wallSet[ft.wall];
   return m;
 }
 
@@ -107,7 +161,7 @@ export function buildRoom(spec, opts = {}) {
   }
   const { W, D, RH, X0, X1, Y0, Y1, walls, w2 } = F;
   const style = spec.style || 'modern';
-  const M = mats(style);
+  const M = mats(style === 'neglected' ? 'modern' : style, spec);
   const root = new THREE.Group(); root.name = 'room';
   const ceilings = new THREE.Group(); ceilings.name = 'ceilings';
   const pick = [];                              // meshes that select a feature when clicked
@@ -167,7 +221,8 @@ export function buildRoom(spec, opts = {}) {
       const v = b2t(x, y, z); pos.setXYZ(i, v.x, v.y, v.z);
     }
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, M.wall); mesh.name = 'wall_' + wall; mesh.userData.wall = wall;
+    const WS = M.wallSet[wall];
+    const mesh = new THREE.Mesh(geo, WS.wall); mesh.name = 'wall_' + wall; mesh.userData.wall = wall;
     root.add(mesh);
     // skirting runs (not across floor-level openings)
     const gaps = feats.filter(x => x.wall === wall && ['alcove', 'kitchenette', 'door', 'arch'].includes(x.type)).map(span).sort((a, b) => a[0] - b[0]);
@@ -176,6 +231,10 @@ export function buildRoom(spec, opts = {}) {
     for (const [a, b] of gaps) { if (a > cur) runs.push([cur, a]); cur = Math.max(cur, b); }
     if (cur < f.hi) runs.push([cur, f.hi]);
     for (const [a, b] of runs) if (b - a > 0.02) wb(wall, a, b, -0.018, 0, 0, 0.12, M.trim);
+    if (WS.lowerFin) {                                  // lower walls (panelling / tiles / two-tone) and their rail
+      const H = Math.min(+(WS.lowerFin.height ?? (WS.lowerFin.type === 'panelling' ? 1.15 : 1.2)), RH - 0.3);
+      for (const [a, b] of runs) if (b - a > 0.05) { wb(wall, a, b, -0.008, 0, 0, H, WS.lower); wb(wall, a, b, -0.03, 0, H, H + 0.05, M.trim); }
+    }
     // coving along the top, broken only where a full-height alcove or kitchenette opens the wall
     const tops = feats.filter(x => x.wall === wall && fullRecess(x)).map(span).sort((a, b) => a[0] - b[0]);
     let ct = f.lo; const cruns = [];
@@ -188,9 +247,16 @@ export function buildRoom(spec, opts = {}) {
     const [u0, u1] = span(ft);
     const mlo = cornerMate(ft, 'lo'), mhi = cornerMate(ft, 'hi');
     const dlo = mlo ? fdepth(mlo) : 0, dhi = mhi ? fdepth(mhi) : 0;
-    wb(wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, M.wall, ft.id);
-    if (!mlo) wb(wall, u0 - T, u0, 0, depth + T, 0, RH, M.wall, ft.id);
-    if (!mhi) wb(wall, u1, u1 + T, 0, depth + T, 0, RH, M.wall, ft.id);
+    const AS = M.alcoveSet(ft);
+    wb(wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, AS.wall, ft.id);
+    if (!mlo) wb(wall, u0 - T, u0, 0, depth + T, 0, RH, AS.wall, ft.id);
+    if (!mhi) wb(wall, u1, u1 + T, 0, depth + T, 0, RH, AS.wall, ft.id);
+    if (AS.lowerFin && ft.type === 'alcove') {
+      const H = Math.min(+(AS.lowerFin.height ?? (AS.lowerFin.type === 'panelling' ? 1.15 : 1.2)), RH - 0.3);
+      wb(wall, u0 - dlo, u1 + dhi, depth - 0.008, depth, 0, H, AS.lower, ft.id);
+      if (!mlo) wb(wall, u0, u0 + 0.008, -0.008, depth, 0, H, AS.lower, ft.id);
+      if (!mhi) wb(wall, u1 - 0.008, u1, -0.008, depth, 0, H, AS.lower, ft.id);
+    }
     const zone = (p0, p1, name) => { const a = w2(wall, p0[0], p0[1]), b = w2(wall, p1[0], p1[1]);
       zones.push({ name, x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: floorMat || M.floor, h, fid: ft.id }); };
     zone([u0, T / 2], [u1, depth], ft.id);
@@ -248,7 +314,7 @@ export function buildRoom(spec, opts = {}) {
       wb(wall, (u0 + u1) / 2 - 0.03, (u0 + u1) / 2 + 0.03, T * 0.55, T * 0.9, s, s + h, M.frame, ft.id);
       wb(wall, u0 - 0.06, u1 + 0.06, -0.05, T * 0.55, s - 0.025, s, M.trim, ft.id);
       // the outside view itself is the photo sphere (outsideSphere); here only the dressing
-      const dressing = ft.dressing || { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[spec.style] || 'none';
+      const dressing = ft.dressing || { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[runDown(spec) ? 'neglected' : spec.style] || 'none';
       if (dressing === 'frosted') wb(wall, u0, u1, T * 0.69, T * 0.73, s, s + h, M.frosted, ft.id);
       if (dressing === 'blinds') {
         const stack = s + h - h * 0.33;
@@ -335,7 +401,7 @@ const texLoader = new THREE.TextureLoader();
 const outsideTex = new Map();
 export function outsideHdriId(spec, cfg) {
   const out = spec.outside || {};
-  const view = out.view || cfg?.style_default?.[spec.style] || 'garden';
+  const view = out.view || cfg?.style_default?.[runDown(spec) ? 'neglected' : spec.style] || 'garden';
   if (view === 'custom') return out.hdri || null;
   const v = (cfg?.views || []).find(x => x.id === view);
   return v ? (v[spec.lighting || 'day'] || v.day) : null;
@@ -412,7 +478,7 @@ export function footprint(g, item, meta) {
 }
 
 export function lightRoom(scene, spec) {
-  const neg = spec.style === 'neglected', night = spec.lighting === 'night', dusk = spec.lighting === 'dusk';
+  const neg = runDown(spec), night = spec.lighting === 'night', dusk = spec.lighting === 'dusk';
   const hemi = new THREE.HemisphereLight(neg ? 0xffe2b8 : 0xffffff, neg ? 0x3a2a18 : 0x8a8070, neg ? 1.1 : (night ? 1.2 : 1.6));
   const dir = new THREE.DirectionalLight(neg ? 0xffd9a0 : 0xffffff, night ? 0.4 : (dusk ? 0.7 : 1.2));
   dir.position.set(-3, 6, 2);

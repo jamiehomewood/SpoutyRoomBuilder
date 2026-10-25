@@ -1,7 +1,7 @@
 // Room Builder - the builder page.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildRoom, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId } from './scene.js';
+import { buildRoom, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId, runDown, finishColour } from './scene.js';
 
 // ================================================================== state
 // append() that skips null/false, so panels can include optional parts inline
@@ -37,6 +37,25 @@ const WALLNAMES = ['north', 'east', 'south', 'west'];
 const FEATURE_LABEL = { alcove: 'Alcove', door: 'Door', window: 'Window', arch: 'Arch', kitchenette: 'Kitchenette' };
 
 let presets = [];
+let finCfg = { presets: {}, surfaces: {}, palettes: {}, options: {}, conditions: [] };   // presets/finishes.json
+const clone = o => JSON.parse(JSON.stringify(o));
+// what each room type starts with (finishes only; the condition is kept when the type changes)
+function presetFinishes(type) {
+  const p = clone(finCfg.presets?.[type] || finCfg.presets?.modern || {});
+  delete p.condition; return p;
+}
+// old specs had "neglected" as a style: it is now a home in neglected condition. Specs without finishes get their type's preset.
+function normaliseLook(s) {
+  if (s.style === 'neglected') {
+    s.style = 'modern'; s.condition ||= 'neglected';
+    s.finishes ||= presetFinishes('neglected');
+  }
+  s.style ||= 'modern';
+  s.condition ||= 'new';
+  if (s.style !== 'outdoor' && !s.finishes) s.finishes = presetFinishes(s.style);
+  return s;
+}
+const suitKey = s => runDown(s) ? 'neglected' : s.style;   // matches model "Suits" tags and outside-view defaults
 let outsideCfg = { views: [], style_default: {} };
 let outsideMesh = null;
 let catalogue = [];                      // model.json entries
@@ -54,7 +73,7 @@ function blankSpec(room) {
   return {
     version: 1, name: 'New room',
     room: { preset: r.id || 'custom', width: r.width, depth: r.depth, height: r.height, eye: r.eye ?? 1.12, projected: r.projected || { walls: true, floor: true, ceiling: false } },
-    style: 'modern', lighting: 'day', features: [], items: [], views: [{ name: 'centre', x: 0, y: 0, yaw: 0 }], render: { quality: 'standard' },
+    style: 'modern', condition: 'new', finishes: presetFinishes('modern'), lighting: 'day', features: [], items: [], views: [{ name: 'centre', x: 0, y: 0, yaw: 0 }], render: { quality: 'standard' },
   };
 }
 
@@ -75,7 +94,7 @@ function changed({ structural = false, rebuild = true, items = false } = {}) {
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); spec = JSON.parse(undoStack.pop()); lastSnap = snapshot(); afterLoad(false); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); spec = JSON.parse(redoStack.pop()); lastSnap = snapshot(); afterLoad(false); }
 function loadSpec(s, resetUndo = true) {
-  spec = s; spec.features ||= []; spec.items ||= []; spec.views ||= [{ name: 'centre', x: 0, y: 0, yaw: 0 }];
+  spec = normaliseLook(s); spec.features ||= []; spec.items ||= []; spec.views ||= [{ name: 'centre', x: 0, y: 0, yaw: 0 }];
   spec.render ||= { quality: 'standard' };
   for (const f of spec.features) f.id ||= uid(f.type);
   for (const i of spec.items) i.id ||= uid('item');
@@ -170,7 +189,7 @@ function rebuildRoom() {
   lights = lightRoom(scene, spec);
   if (outsideMesh) scene.remove(outsideMesh);
   outsideMesh = outsideSphere(spec, outsideCfg); scene.add(outsideMesh);
-  scene.background = new THREE.Color(spec.style === 'neglected' ? 0x141210 : 0x15171a);
+  scene.background = new THREE.Color(runDown(spec) ? 0x141210 : 0x15171a);
   applyVisibility();
   drawOverlay();
   updateOrtho();
@@ -538,9 +557,13 @@ function tabRoom(body) {
     custom ? el('div', { class: 'row' }, el('label', {}), el('button', { onclick: saveCustomPreset }, 'Save this size as a room')) : null,
     custom ? el('p', { class: 'note warn' }, 'The render only lines up in a physical room of exactly this size. Projected into a bigger or smaller room, everything is the wrong scale: furniture lands on the floor and the top of the walls is lost. Keep the measured room size even for a smaller place such as a cell: the walls can be pushed back with alcoves but not brought in.') : null,
     el('h4', {}, 'Look'),
-    row('Style', radio('style', [['modern', 'Modern'], ['neglected', 'Neglected'], ['hospital', 'Hospital'], ['court', 'Court'], ['custody', 'Custody'], ['outdoor', 'Outdoor']], spec.style, v => { spec.style = v; changed({ structural: true }); })),
+    row('Room type', radio('style', [['modern', 'Home'], ['hospital', 'Hospital'], ['court', 'Court'], ['custody', 'Custody'], ['outdoor', 'Outdoor']], spec.style, v => {
+      spec.style = v; if (v !== 'outdoor') spec.finishes = presetFinishes(v); changed({ structural: true }); })),
+    el('p', { class: 'note' }, 'The room type sets the lighting, doors, corridors and kitchen, and fills in its usual finishes below. Change any finish afterwards; Undo puts back what you had.'),
+    spec.style !== 'outdoor' ? row('Condition', radio('cond', (finCfg.conditions || []).map(([v, l]) => [v, l]), spec.condition || 'new', v => { spec.condition = v; changed({ structural: true }); })) : null,
+    spec.style !== 'outdoor' ? el('p', { class: 'note' }, ((finCfg.conditions || []).find(c => c[0] === (spec.condition || 'new')) || [])[2] || '') : null,
     row('Light', radio('light', [['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night']], spec.lighting, v => { spec.lighting = v; changed({ structural: true }); })),
-    el('p', { class: 'note' }, 'Style sets the walls, floor, ceiling, kitchen and lighting. The same layout can be rendered in every style: change it here and render again.'),
+    ...(spec.style !== 'outdoor' ? finishesPanel() : []),
     ...outsidePanel(),
     el('h4', {}, 'Start from'),
     el('div', { class: 'addbar' },
@@ -548,14 +571,118 @@ function tabRoom(body) {
       el('button', { onclick: () => { if (confirm('Clear all walls features and models from this room?')) { spec.features = []; spec.items = []; changed({ structural: true, items: true }); } } }, 'Empty this room')),
   );
 }
+// ---------------------------------------------------------------- finishes
+const SURFACE_LABEL = { walls: 'Walls', lower: 'Lower walls', floor: 'Floor', ceiling: 'Ceiling' };
+const OPTION_LABEL = { colour: 'Colour', colour2: 'Pattern colour', grout: 'Grout', sheen: 'Finish', pattern: 'Pattern', tile_size: 'Tile size',
+  wood: 'Wood', brick: 'Brick', carpet_pattern: 'Style', lino_pattern: 'Pattern', height: 'Height' };
+const GROUTS = [['White', '#e6e6e2'], ['Light grey', '#bdbdb8'], ['Grey', '#8e8e8a'], ['Dark', '#3e3e3c']];
+function paletteFor(surface, type, opt) {
+  const P = finCfg.palettes || {};
+  if (opt === 'grout') return GROUTS;
+  if (type === 'carpet') return P.carpet || [];
+  if (type === 'tiles') return P.tiles || [];
+  if (['vinyl', 'resin', 'lino'].includes(type)) return P.vinyl || [];
+  if (type === 'wallpaper') return P.wallpaper || [];
+  return P.paint || [];
+}
+function swatches(list, value, onPick, allowNone = false) {
+  const wrap = el('div', { class: 'swatches' });
+  if (allowNone) wrap.append(el('button', { class: 'sw none' + (!value ? ' on' : ''), title: 'None', onclick: () => onPick(null) }, '–'));
+  for (const [name, hex] of list) wrap.append(el('button', { class: 'sw' + (String(value).toLowerCase() === hex.toLowerCase() ? ' on' : ''), title: name, style: `background:${hex}`, onclick: () => onPick(hex) }));
+  wrap.append(el('input', { type: 'color', title: 'Any colour', value: /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#888888', onchange: e => onPick(e.target.value) }));
+  return wrap;
+}
+const FIN_DEFAULTS = { sheen: 'matt', pattern: 'stripe', tile_size: 'sq15', wood: 'oak', brick: 'red', carpet_pattern: 'plain', lino_pattern: 'plain' };
+// An editor for one finish object (mutated in place). surface: walls | lower | floor | ceiling.
+function finishEditor(surface, f, onChange) {
+  const types = finCfg.surfaces?.[surface] || {};
+  const box = el('div', { class: 'fin' });
+  const setType = t => {
+    const keep = { colour: f.colour, colour2: f.colour2 };
+    for (const k of Object.keys(f)) delete f[k];
+    f.type = t;
+    for (const o of (types[t]?.options || [])) {
+      // keep the colour only if it belongs to the new finish's palette (vinyl blue-grey shouldn't become the carpet colour)
+      const pal = paletteFor(surface, t, o), inPal = c => c && pal.some(([, h]) => h.toLowerCase() === String(c).toLowerCase());
+      if (o === 'colour') f.colour = inPal(keep.colour) ? keep.colour : (pal[0] || [])[1] || '#cccccc';
+      else if (o === 'colour2') {
+        const d2 = { wallpaper: '#c9a85e', carpet: '#a9853f', lino: '#e6ddc6' }[t];
+        if (d2) f.colour2 = inPal(keep.colour2) ? keep.colour2 : d2;
+      }
+      else if (o === 'height') f.height = t === 'panelling' ? 1.15 : 1.2;
+      else if (o === 'grout') { /* default chosen by the renderer from the tile colour */ }
+      else if (FIN_DEFAULTS[o]) f[o] = FIN_DEFAULTS[o];
+    }
+    if (t === 'tiles' && surface === 'floor') f.tile_size = 'sq30';
+    onChange();
+  };
+  box.append(row(SURFACE_LABEL[surface] || surface, el('select', { class: 'grow', onchange: e => setType(e.target.value) },
+    Object.entries(types).map(([k, v]) => el('option', { value: k, selected: k === (f.type || 'none') }, v.name)))));
+  for (const o of (types[f.type]?.options || [])) {
+    if (o === 'colour' || o === 'colour2' || o === 'grout') {
+      if (o === 'colour' && f.type === 'panelling' && f.wood !== 'painted') continue;
+      if (o === 'colour' && ['wood', 'laminate'].includes(f.type) && f.wood !== 'painted') continue;
+      if (o === 'colour2' && f.type === 'wallpaper' && ['woodchip', 'vintage'].includes(f.pattern)) continue;
+      if (o === 'colour2' && f.type === 'carpet' && !['heather', 'patterned'].includes(f.carpet_pattern)) continue;
+      if (o === 'colour2' && f.type === 'lino' && f.lino_pattern === 'plain') continue;
+      const label = o === 'colour2' ? (f.type === 'tiles' ? 'Second colour (checks)' : f.type === 'carpet' && f.carpet_pattern === 'heather' ? 'Second colour' : 'Pattern colour')
+        : o === 'colour' && f.type === 'wallpaper' ? 'Background' : OPTION_LABEL[o];
+      box.append(row(label, swatches(paletteFor(surface, f.type, o), f[o], hex => { if (hex) f[o] = hex; else delete f[o]; onChange(); }, o === 'colour2' && f.type === 'tiles')));
+    } else if (o === 'height') {
+      box.append(row('Height', numIn(f.height ?? 1.2, 0.05, v => { f.height = Math.max(0.3, Math.min(2.0, v)); onChange(); }, { min: 0.3, max: 2.0 }), el('span', { class: 'note' }, 'm')));
+    } else {
+      const opts = (finCfg.options?.[o] || []);
+      box.append(row(OPTION_LABEL[o] || o, el('select', { class: 'grow', onchange: e => { f[o] = e.target.value; onChange(); } },
+        opts.map(([v, l]) => el('option', { value: v, selected: v === f[o] }, l)))));
+    }
+  }
+  return box;
+}
+function trimEditor(t, onChange) {
+  const wood = !!t.wood;
+  return el('div', { class: 'fin' },
+    row('Skirting & coving', el('select', { class: 'grow', onchange: e => { if (e.target.value === 'wood') { t.wood = 'oak'; } else delete t.wood; onChange(); } },
+      el('option', { value: 'paint', selected: !wood }, 'Painted'), el('option', { value: 'wood', selected: wood }, 'Wood'))),
+    wood ? row('Wood', el('select', { class: 'grow', onchange: e => { t.wood = e.target.value; onChange(); } },
+             (finCfg.options?.wood || []).filter(([v]) => v !== 'painted').map(([v, l]) => el('option', { value: v, selected: v === t.wood }, l))))
+         : row('Colour', swatches(finCfg.palettes?.paint || [], t.colour, hex => { t.colour = hex; onChange(); })),
+    !wood ? row('Finish', el('select', { class: 'grow', onchange: e => { t.sheen = e.target.value; onChange(); } },
+             (finCfg.options?.sheen || []).map(([v, l]) => el('option', { value: v, selected: v === (t.sheen || 'gloss') }, l)))) : null);
+}
+function finishesPanel() {
+  const F = spec.finishes ||= presetFinishes(spec.style);
+  F.walls ||= { type: 'paint', colour: '#ece7dd' }; F.lower ||= { type: 'none' }; F.floor ||= { type: 'wood', wood: 'oak' };
+  F.ceiling ||= { type: 'plaster', colour: '#f0eee8' }; F.trim ||= { colour: '#f2f2f0', sheen: 'gloss' };
+  const ch = () => changed({ structural: true });
+  return [
+    el('h4', {}, 'Finishes'),
+    el('p', { class: 'note' }, 'What the room is decorated with. A single wall or an alcove can have its own finish: set it on the Walls tab.'),
+    finishEditor('walls', F.walls, ch), finishEditor('lower', F.lower, ch), finishEditor('floor', F.floor, ch), finishEditor('ceiling', F.ceiling, ch),
+    trimEditor(F.trim, ch),
+  ];
+}
+// An override ({walls, lower}) on a wall or an alcove: "Same as …" or its own finish, starting from what it inherits.
+function overrideEditor(holder, key, inherit, sameLabel, ch) {
+  const has = !!holder[key];
+  const box = el('div', {});
+  box.append(row('Finish', el('select', { class: 'grow', onchange: e => {
+    if (e.target.value === 'own') { const [w, l] = inherit(); holder[key] = { walls: clone(w), lower: clone(l || { type: 'none' }) }; } else delete holder[key];
+    ch(); } }, el('option', { value: 'same', selected: !has }, sameLabel), el('option', { value: 'own', selected: has }, 'Its own finish'))));
+  if (has) {
+    holder[key].walls ||= clone(inherit()[0]); holder[key].lower ||= { type: 'none' };
+    box.append(finishEditor('walls', holder[key].walls, ch), finishEditor('lower', holder[key].lower, ch));
+  }
+  return box;
+}
+
 function outsidePanel() {
   spec.outside ||= {};
   const o = spec.outside;
-  const cur = o.view || outsideCfg.style_default?.[spec.style] || 'garden';
+  const cur = o.view || outsideCfg.style_default?.[suitKey(spec)] || 'garden';
   const views = outsideCfg.views || [];
   const id = outsideHdriId(spec, outsideCfg);
   const sel = el('select', { class: 'grow', onchange: e => { o.view = e.target.value; changed({ structural: true }); } },
-    views.map(v => el('option', { value: v.id, selected: v.id === cur }, v.name + ((v.styles || []).includes(spec.style) ? '' : ' (other styles)'))),
+    views.map(v => el('option', { value: v.id, selected: v.id === cur }, v.name + ((v.styles || []).includes(suitKey(spec)) ? '' : ' (other room types)'))),
     mode === 'advanced' ? el('option', { value: 'custom', selected: cur === 'custom' }, 'Any Poly Haven HDRI…') : null);
   return [
     el('h4', {}, 'Outside'),
@@ -618,6 +745,15 @@ function tabWalls(body) {
   );
   if (!spec.features.length) body.append(el('p', { class: 'note', style: 'margin-top:14px' }, 'No features yet: the room is four plain walls.'));
   const adv = mode === 'advanced';
+  // a feature wall: any wall can have its own finish (alcoves on it follow unless they have their own)
+  spec.wall_finishes ||= {};
+  const wfBox = el('details', { class: 'card', open: Object.keys(spec.wall_finishes).length > 0 }, el('summary', {}, el('b', {}, 'Wall finishes'),
+    el('span', { class: 'note' }, Object.keys(spec.wall_finishes).length ? '  ' + Object.keys(spec.wall_finishes).join(', ') + ' wall' + (Object.keys(spec.wall_finishes).length > 1 ? 's have' : ' has') + ' their own' : '  all walls as the room')));
+  for (const wall of WALLNAMES) {
+    wfBox.append(el('h4', {}, `${wall} wall`), overrideEditor(spec.wall_finishes, wall,
+      () => [spec.finishes?.walls || {}, spec.finishes?.lower || { type: 'none' }], 'Same as the room', () => changed({ structural: true })));
+  }
+  body.append(wfBox);
   for (const wall of WALLNAMES) {
     const fs = spec.features.filter(f => f.wall === wall); if (!fs.length) continue;
     body.append(el('h4', {}, `${wall} wall · ${r2(wallLen(wall))} m`));
@@ -641,6 +777,10 @@ function tabWalls(body) {
       );
       if (f.type === 'alcove') {
         card.append(fld('Depth', 'depth', 0.2, 4.0));
+        card.append(overrideEditor(f, 'finish', () => {
+          const wf = spec.wall_finishes?.[f.wall];
+          return [wf?.walls || spec.finishes?.walls || {}, wf && 'lower' in wf ? wf.lower : (spec.finishes?.lower || { type: 'none' })];
+        }, 'Same as its wall', commit));
         if (+f.depth > 1.2) card.append(el('p', { class: 'note' }, 'Deep bays get their own ceiling light' + (spec.style === 'hospital' ? ', and a bed-head services panel on the back wall when deeper than 1.5 m.' : '.')));
         card.append(row('Shelves', numIn(f.shelves || 0, 1, v => { f.shelves = Math.max(0, Math.min(8, Math.round(v))); commit(); }, { min: 0, max: 8 })));
         if (adv) card.append(row('Height', numIn(f.height ?? spec.room.height, 0.01, v => { f.height = v; commit(); }), el('span', { class: 'note' }, 'm (full height = room height)')));
@@ -655,7 +795,7 @@ function tabWalls(body) {
       }
       if (f.type === 'window') {
         card.append(fld('Sill height', 'sill', 0.2, spec.room.height - 0.6), fld('Height', 'height', 0.4, spec.room.height - 0.3));
-        const dflt = { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[spec.style] || 'none';
+        const dflt = { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[suitKey(spec)] || 'none';
         card.append(row('Dressing', radio(f.id + 'o', [['none', 'None'], ['blinds', 'Blinds'], ['curtains', 'Curtains'], ['nets_curtains', 'Nets + curtains'], ['frosted', 'Frosted']], f.dressing || dflt, v => { f.dressing = v; commit(); })));
       }
       if (f.type === 'arch') {
@@ -709,14 +849,14 @@ function libraryPanel(body) {
     el('div', { class: 'row' },
       el('select', { onchange: e => { f.status = e.target.value; save(); } },
         [['usable', 'Tested + untested'], ['room-tested', 'Room-tested only'], ['untested', 'Untested only'], ['rejected', 'Rejected'], ['all', 'Everything']].map(([v, l]) => el('option', { value: v, selected: v === f.status }, l))),
-      el('label', { class: 'chk', style: 'background:none;border:0;padding:0' }, el('input', { type: 'checkbox', checked: f.style, onchange: e => { f.style = e.target.checked; save(); } }), `Suits ${spec.style}`)),
+      el('label', { class: 'chk', style: 'background:none;border:0;padding:0' }, el('input', { type: 'checkbox', checked: f.style, onchange: e => { f.style = e.target.checked; save(); } }), `Suits ${suitKey(spec) === 'modern' ? 'home' : suitKey(spec)}`)),
   );
   const q = f.q.toLowerCase().trim();
   const list = catalogue.filter(m => {
     if (f.cat && m.category !== f.cat) return false;
     if (f.status === 'usable' && m.status === 'rejected') return false;
     if (!['usable', 'all'].includes(f.status) && m.status !== f.status) return false;
-    if (f.style && m.styles && !m.styles.includes(spec.style)) return false;
+    if (f.style && m.styles && !m.styles.includes(suitKey(spec))) return false;
     if (q && !`${m.name} ${m.id} ${(m.tags || []).join(' ')} ${m.category}`.toLowerCase().includes(q)) return false;
     return true;
   }).sort((a, b) => (a.status === 'room-tested' ? 0 : 1) - (b.status === 'room-tested' ? 0 : 1) || a.name.localeCompare(b.name));
@@ -1024,6 +1164,7 @@ $('#btnSettings').addEventListener('click', openSettings);
   await refreshStatus();
   try { presets = (await api('/api/presets')).rooms; } catch { presets = []; }
   try { outsideCfg = await api('/api/outside'); } catch { /* no outside presets */ }
+  try { finCfg = await api('/api/finishes'); } catch { /* no finishes file: the renderer falls back to the room type */ }
   try { catalogue = await api('/api/catalogue'); } catch { catalogue = []; }
   resize();
   const draft = store.get('rb_draft', null);

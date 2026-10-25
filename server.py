@@ -489,6 +489,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"rooms": base + [dict(r, custom=True) for r in custom]})
             if path == "/api/catalogue": return self.send_json(catalogue_list())
             if path == "/api/outside": return self.send_json(load_json(os.path.join(PRESETS, "outside.json"), {"views": []}))
+            if path == "/api/finishes": return self.send_json(load_json(os.path.join(PRESETS, "finishes.json"), {"presets": {}}))
             m = re.fullmatch(r"/api/hdri/([A-Za-z0-9_\-]+)\.png", path)
             if m:                                   # small equirect preview of an outside view, for the live builder
                 d = os.path.join(ROOT, "textures", "hdri"); os.makedirs(d, exist_ok=True)

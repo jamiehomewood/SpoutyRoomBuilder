@@ -20,6 +20,8 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
 | `catalogue/models/<id>/` | The model library: the model files plus `model.json` (status, notes, licence record) |
 | `library/<id>/` | Finished rooms: `view_<name>.png/.jpg`, `credits.md`, `spec.json`, `room.blend` |
 | `rooms/` | Rooms you saved with **Save** (the spec only) |
+| `presets/finishes.json` | Finish types, colour palettes, conditions and what each room type starts with |
+| `textures/patterns/` | Wallpaper / carpet pattern masks (own work, made by `tools/make_patterns.py`) |
 | `presets/rooms.json` | The physical rooms. Add the other rooms here once measured (or use **Save this size as a room**) |
 | `examples/` | Example specs (the Glenda room) |
 | `jobs/` | The render queue, logs and the speed figures used for time estimates |
@@ -28,8 +30,15 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
 
 ## Using it
 
-1. **Room**: pick a physical room or type a custom size, then the style (modern / neglected) and light (day / dusk / night).
-2. **Walls**: add alcoves, doors, windows, arches (to a kitchen or an empty room) and kitchenettes. These are built
+1. **Room**: pick a physical room or type a custom size (it must match the room the render will play in), then the room type
+   (home / hospital / court / custody / outdoor), the **condition** and the light (day / dusk / night).
+   **Finishes**: walls (paint, wallpaper, tiles, blockwork, brick, panelling, bare plaster), lower walls (panelling, tiles,
+   two-tone paint or paper up to a dado rail), floor (carpet, wood, laminate, vinyl, lino, tiles, resin, concrete), ceiling
+   and skirting/coving, each with its own colours and options. The room type fills in its usual finishes; change any of them.
+   **Condition** (new / lived-in / worn / neglected / derelict) ages whatever finishes you chose: scuffs, grime, yellowing,
+   damp stains, peeling, worn and stained floors. A neglected or derelict home also gets the run-down fittings (bare bulb,
+   nets, dated kitchen).
+2. **Walls**: give any wall its own finish (a feature wall, a tiled wall) under **Wall finishes**, and any alcove its own. Add alcoves, doors, windows, arches (to a kitchen or an empty room) and kitchenettes. These are built
    beyond the real walls, so deep furniture can stand in them without covering the projected floor.
 3. **Models**: add models from the library (room-tested ones first), or find more on Poly Haven / Sketchfab and import them.
    Drag them in Plan view; **R** rotates, **Back to wall** pushes one against the nearest wall facing into the room.

@@ -46,7 +46,10 @@ EYE = float(R.get("eye", 1.12))
 X0, X1, Y0, Y1 = -W / 2, W / 2, -D / 2, D / 2
 T = 0.15                                            # wall thickness
 STYLE = SPEC.get("style", "modern")
-NEGLECT = STYLE == "neglected"
+LEGACY_NEGLECT = STYLE == "neglected"                 # old specs: "neglected" was a style; now it is a condition
+CONDITION = SPEC.get("condition") or ("neglected" if LEGACY_NEGLECT else "new")
+HOME = STYLE in ("modern", "neglected")
+NEGLECT = HOME and CONDITION in ("neglected", "derelict")   # run-down home fittings: bare bulb, nets, dated kitchen
 HOSPITAL = STYLE == "hospital"
 COURT = STYLE == "court"
 CUSTODY = STYLE == "custody"
@@ -62,7 +65,7 @@ def _load(p, d):
     except Exception: return d
 OUT_CFG = _load(os.path.join(ROOT, "presets", "outside.json"), {"views": [], "strength": {}, "style_default": {}})
 OUTSIDE = SPEC.get("outside") or {}
-OUT_VIEW = OUTSIDE.get("view") or OUT_CFG.get("style_default", {}).get(STYLE, "garden")
+OUT_VIEW = OUTSIDE.get("view") or OUT_CFG.get("style_default", {}).get("neglected" if NEGLECT else STYLE, "garden")
 _v = next((v for v in OUT_CFG.get("views", []) if v["id"] == OUT_VIEW), None)
 HDRI_ID = OUTSIDE.get("hdri") if OUT_VIEW == "custom" else (_v or {}).get(LIGHTING) or (_v or {}).get("day")
 HDRI_ROT = float(OUTSIDE.get("rotation", 0))
@@ -280,6 +283,310 @@ def carpet(name, c1, c2):
         if n.type == "TEX_VORONOI": n.inputs["Scale"].default_value = 400.0
     return m
 
+# ============================================================== finishes + condition
+# What the walls, lower walls, floor, ceiling and trim are made of (presets/finishes.json, overridden by the spec),
+# and how worn the room is. Each finish is built procedurally so any colour works; the condition then adds dirt,
+# yellowing, damp, scuffs, peeling and floor wear on top.
+FIN_CFG = _load(os.path.join(ROOT, "presets", "finishes.json"), {"presets": {}})
+_preset = FIN_CFG.get("presets", {}).get("neglected" if LEGACY_NEGLECT else STYLE) or FIN_CFG.get("presets", {}).get("modern", {})
+FIN = {k: dict(v) for k, v in _preset.items() if isinstance(v, dict)}
+for _k, _v in (SPEC.get("finishes") or {}).items():
+    if isinstance(_v, dict): FIN[_k] = dict(_v)
+PATTERNS = os.path.join(TEX, "patterns")
+COND = {
+    "new":       dict(dirt=0.0, yellow=0.0, damp=0.0, scuff=0.0, peel=0.0, fade=0.0, wear=0.0, stain=0.0),
+    "lived_in":  dict(dirt=0.08, yellow=0.0, damp=0.0, scuff=0.3, peel=0.0, fade=0.03, wear=0.15, stain=0.08),
+    "worn":      dict(dirt=0.25, yellow=0.12, damp=0.08, scuff=0.55, peel=0.0, fade=0.12, wear=0.35, stain=0.25),
+    "neglected": dict(dirt=0.55, yellow=0.35, damp=0.4, scuff=0.75, peel=0.18, fade=0.2, wear=0.55, stain=0.5),
+    "derelict":  dict(dirt=0.8, yellow=0.5, damp=0.75, scuff=0.9, peel=0.45, fade=0.3, wear=0.8, stain=0.8),
+}.get(CONDITION, {})
+SHEEN = {"matt": 0.85, "silk": 0.5, "gloss": 0.22}
+
+def lin(hexs, fallback=(0.7, 0.7, 0.7)):
+    """sRGB hex (#rrggbb) to the linear colour Blender wants."""
+    try:
+        h = hexs.lstrip("#"); c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        return tuple(x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c)
+    except Exception:
+        return fallback
+
+def shade(c, k): return tuple(max(0.0, min(1.0, x * k)) for x in c)
+
+def _n(nt, kind, **inputs):
+    n = nt.nodes.new(kind)
+    for k, v in inputs.items():
+        if k in n.inputs: n.inputs[k].default_value = v
+    return n
+
+def _mix(nt, fac, a, b, blend="MIX"):
+    m = nt.nodes.new("ShaderNodeMix"); m.data_type = "RGBA"; m.blend_type = blend
+    (nt.links.new(fac, m.inputs[0]) if not isinstance(fac, (int, float)) else setattr(m.inputs[0], "default_value", fac))
+    (nt.links.new(a, m.inputs[6]) if not isinstance(a, tuple) else setattr(m.inputs[6], "default_value", (*a, 1)))
+    (nt.links.new(b, m.inputs[7]) if not isinstance(b, tuple) else setattr(m.inputs[7], "default_value", (*b, 1)))
+    return m.outputs[2]
+
+def _maprange(nt, val, a, b, lo=0.0, hi=1.0):
+    m = nt.nodes.new("ShaderNodeMapRange"); nt.links.new(val, m.inputs[0])
+    m.inputs[1].default_value, m.inputs[2].default_value, m.inputs[3].default_value, m.inputs[4].default_value = a, b, lo, hi
+    return m.outputs[0]
+
+def _math(nt, op, a, b=None, clamp=True):
+    m = nt.nodes.new("ShaderNodeMath"); m.operation = op; m.use_clamp = clamp
+    (nt.links.new(a, m.inputs[0]) if not isinstance(a, (int, float)) else setattr(m.inputs[0], "default_value", a))
+    if b is not None: (nt.links.new(b, m.inputs[1]) if not isinstance(b, (int, float)) else setattr(m.inputs[1], "default_value", b))
+    return m.outputs[0]
+
+def _wall_uv(nt, size):
+    """Coordinates that run along any wall and up it (x + y, z), in units of 'size' metres."""
+    tc = nt.nodes.new("ShaderNodeTexCoord"); sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(tc.outputs["Object"], sep.inputs[0])
+    u = _math(nt, "ADD", sep.outputs["X"], sep.outputs["Y"], clamp=False)
+    cmb = nt.nodes.new("ShaderNodeCombineXYZ"); nt.links.new(u, cmb.inputs["X"]); nt.links.new(sep.outputs["Z"], cmb.inputs["Y"])
+    sc = nt.nodes.new("ShaderNodeVectorMath"); sc.operation = "SCALE"; nt.links.new(cmb.outputs[0], sc.inputs[0]); sc.inputs["Scale"].default_value = 1 / size
+    return sc.outputs[0]
+
+def _floor_uv(nt, size):
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sc = nt.nodes.new("ShaderNodeVectorMath"); sc.operation = "SCALE"; nt.links.new(tc.outputs["Object"], sc.inputs[0]); sc.inputs["Scale"].default_value = 1 / size
+    return sc.outputs[0]
+
+def _bump(nt, b, height, strength):
+    bp = nt.nodes.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = strength
+    nt.links.new(height, bp.inputs["Height"]); nt.links.new(bp.outputs[0], b.inputs["Normal"])
+
+def _bsdf(m): return next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+
+def _pattern_mask(nt, name, vec):
+    p = os.path.join(PATTERNS, f"{name}.png")
+    if not os.path.exists(p): return None
+    t = nt.nodes.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(p, check_existing=True)
+    t.image.colorspace_settings.name = "Non-Color"; t.interpolation = "Cubic"
+    nt.links.new(vec, t.inputs[0]); return t.outputs[0]
+
+def paint_mat(name, colour, sheen="matt", texture=0.04):
+    m, nt, b = principled(name)
+    c = lin(colour)
+    nz = _n(nt, "ShaderNodeTexNoise", Scale=3.0, Detail=4.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], nz.inputs["Vector"])
+    col = _mix(nt, _maprange(nt, nz.outputs["Fac"], 0.3, 0.7, 0.0, 1.0), shade(c, 0.985), shade(c, 1.012))
+    nt.links.new(col, b.inputs["Base Color"]); b.inputs["Roughness"].default_value = SHEEN.get(sheen, 0.85)
+    if sheen == "gloss": set_input(b, ("Coat Weight", "Clearcoat"), 0.3)
+    fine = _n(nt, "ShaderNodeTexNoise", Scale=180.0, Detail=2.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], fine.inputs["Vector"])
+    _bump(nt, b, fine.outputs["Fac"], texture)
+    return m
+
+def wallpaper_mat(name, f):
+    pat = f.get("pattern", "woodchip"); c1 = lin(f.get("colour", "#e9dfc3")); c2 = lin(f.get("colour2", "#c9a85e"))
+    if pat == "vintage" and tex_path("decrepit_wallpaper", "diff"):
+        mx = max(c1) or 1
+        return textured(name, "decrepit_wallpaper", scale=1.0, tint=tuple(min(1.0, x / mx) for x in c1), sat=0.55, coord="Object", rough=0.8)
+    m, nt, b = principled(name)
+    vec = _wall_uv(nt, 0.53)
+    mask = None if pat == "woodchip" else _pattern_mask(nt, pat, vec)
+    col = _mix(nt, mask, c1, c2) if mask else None
+    if col is None:
+        nz = _n(nt, "ShaderNodeTexNoise", Scale=2.0, Detail=3.0); nt.links.new(vec, nz.inputs["Vector"])
+        col = _mix(nt, _maprange(nt, nz.outputs["Fac"], 0.3, 0.7), shade(c1, 0.98), shade(c1, 1.01))
+    nt.links.new(col, b.inputs["Base Color"]); b.inputs["Roughness"].default_value = 0.75
+    chip = _n(nt, "ShaderNodeTexVoronoi", Scale=260.0 if pat == "woodchip" else 600.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], chip.inputs["Vector"])
+    _bump(nt, b, chip.outputs["Distance"], 0.35 if pat == "woodchip" else 0.05)
+    return m
+
+TILE_SIZES = {"metro": (0.2, 0.5, 0.5), "sq10": (0.1, 1.0, 0.0), "sq15": (0.15, 1.0, 0.0), "sq30": (0.3, 1.0, 0.0), "sq60": (0.6, 1.0, 0.0)}
+
+def tiles_mat(name, f, wall=True):
+    size, row, off = TILE_SIZES.get(f.get("tile_size", "sq15" if wall else "sq30"), (0.15, 1.0, 0.0))
+    c1 = lin(f.get("colour", "#efefeb")); grout = lin(f.get("grout", "#bdbdb8" if sum(c1) > 1.2 else "#4a4a48"))
+    m = brick_tiles(name, c1, shade(c1, 0.95), grout, size, row=row, offset=off, rough=0.15 if wall else 0.3, wall=wall)
+    b = _bsdf(m); nt = m.node_tree
+    if f.get("colour2") and not wall:                     # two-colour floor tiles: a checkerboard
+        ck = _n(nt, "ShaderNodeTexChecker", Scale=1.0)
+        ck.inputs["Color1"].default_value = (*c1, 1); ck.inputs["Color2"].default_value = (*lin(f["colour2"]), 1)
+        nt.links.new(_floor_uv(nt, size * 2), ck.inputs["Vector"])
+        br = next(n for n in nt.nodes if n.type == "TEX_BRICK")
+        nt.links.new(ck.outputs["Color"], br.inputs["Color1"]); nt.links.new(ck.outputs["Color"], br.inputs["Color2"])
+    set_input(b, ("Coat Weight", "Clearcoat"), 0.35 if wall else 0.15)
+    return m
+
+WOODS = {   # tint, saturation, lift, lift colour for the Poly Haven wood texture
+    "light_oak": dict(tint=None, sat=0.45, lift=0.55, lift_col=(0.72, 0.6, 0.45)),
+    "oak":       dict(tint=(0.95, 0.72, 0.45), sat=0.9, lift=0.0, lift_col=(1, 1, 1)),
+    "dark_oak":  dict(tint=(0.42, 0.28, 0.18), sat=0.9, lift=0.0, lift_col=(1, 1, 1)),
+    "pine":      dict(tint=(1.0, 0.82, 0.55), sat=0.8, lift=0.3, lift_col=(0.85, 0.7, 0.45)),
+    "grey":      dict(tint=None, sat=0.08, lift=0.4, lift_col=(0.62, 0.62, 0.6)),
+}
+
+def wood_mat(name, f, floor=True, laminate=False):
+    w = f.get("wood", "oak")
+    if w == "painted":
+        return paint_mat(name, f.get("colour", "#e6e2d6"), "silk")
+    p = WOODS.get(w, WOODS["oak"])
+    return textured(name, "wood_floor_worn", scale=0.6 if floor else 0.8, tint=p["tint"], sat=p["sat"], lift=p["lift"], lift_col=p["lift_col"],
+                    rough=0.3 if laminate else 0.42, normal=0.12 if laminate else (0.35 if floor else 0.15), coord="UV" if floor else "Object")
+
+def blockwork_mat(name, f):
+    c = lin(f.get("colour", "#e4e1d2"))
+    m = brick_tiles(name, c, shade(c, 0.975), shade(c, 0.86), 0.44, row=0.49, offset=0.5, rough=0.45, wall=True)
+    nt = m.node_tree; nz = _n(nt, "ShaderNodeTexNoise", Scale=90.0, Detail=3.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], nz.inputs["Vector"])
+    _bump(nt, _bsdf(m), nz.outputs["Fac"], 0.12)
+    return m
+
+BRICKS = {"red": ((0.30, 0.10, 0.06), (0.22, 0.075, 0.045), (0.42, 0.4, 0.37)), "yellow": ((0.5, 0.4, 0.24), (0.4, 0.31, 0.18), (0.45, 0.43, 0.4)),
+          "painted": ((0.8, 0.8, 0.77), (0.76, 0.76, 0.73), (0.7, 0.7, 0.67))}
+
+def brick_mat(name, f):
+    c1, c2, mortar = BRICKS.get(f.get("brick", "red"), BRICKS["red"])
+    m = brick_tiles(name, c1, c2, mortar, 0.225, row=0.075 / 0.225, offset=0.5, rough=0.8, wall=True)
+    nt = m.node_tree; br = next(n for n in nt.nodes if n.type == "TEX_BRICK"); br.inputs["Bias"].default_value = 0.0
+    nz = _n(nt, "ShaderNodeTexNoise", Scale=40.0, Detail=5.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], nz.inputs["Vector"])
+    _bump(nt, _bsdf(m), nz.outputs["Fac"], 0.3)
+    return m
+
+def plaster_mat(name):
+    m, nt, b = principled(name)
+    nz = _n(nt, "ShaderNodeTexNoise", Scale=2.5, Detail=6.0); nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], nz.inputs["Vector"])
+    nt.links.new(_mix(nt, nz.outputs["Fac"], (0.62, 0.5, 0.42), (0.74, 0.62, 0.53)), b.inputs["Base Color"]); b.inputs["Roughness"].default_value = 0.9
+    return m
+
+def wall_finish_mat(name, f):
+    t = f.get("type", "paint")
+    if t == "wallpaper": return wallpaper_mat(name, f)
+    if t == "tiles": return tiles_mat(name, f, wall=True)
+    if t == "blockwork": return blockwork_mat(name, f)
+    if t == "brick": return brick_mat(name, f)
+    if t == "panelling": return wood_mat(name, f, floor=False)
+    if t == "plaster": return plaster_mat(name)
+    return paint_mat(name, f.get("colour", "#ece7dd"), f.get("sheen", "matt"))
+
+def floor_finish_mat(name, f):
+    t = f.get("type", "wood")
+    c = lin(f.get("colour", "#77787a")); c2 = lin(f.get("colour2", "")) if f.get("colour2") else shade(c, 1.2)
+    if t == "carpet":
+        pat = f.get("carpet_pattern", "plain")
+        m = carpet(name, c, shade(c, 1.12) if pat != "heather" else c2)
+        if pat in ("patterned", "cord"):
+            nt = m.node_tree; b = _bsdf(m)
+            mask = _pattern_mask(nt, "floral" if pat == "patterned" else "cord", _floor_uv(nt, 0.45 if pat == "patterned" else 0.25))
+            if mask:
+                src = b.inputs["Base Color"].links[0].from_socket
+                nt.links.new(_mix(nt, _math(nt, "MULTIPLY", mask, 0.55 if pat == "patterned" else 1.0), src, c2 if pat == "patterned" else shade(c, 0.8)), b.inputs["Base Color"])
+        return m
+    if t in ("wood", "laminate"): return wood_mat(name, f, floor=True, laminate=(t == "laminate"))
+    if t == "vinyl": return speckle_vinyl(name, c, shade(c, 1.12))
+    if t == "resin": return speckle_vinyl(name, c, shade(c, 1.08), fleck=shade(c, 1.6), rough=0.45)
+    if t == "tiles": return tiles_mat(name, f, wall=False)
+    if t == "lino":
+        m, nt, b = principled(name); pat = f.get("lino_pattern", "plain")
+        if pat == "check":
+            ck = _n(nt, "ShaderNodeTexChecker", Scale=1.0); ck.inputs["Color1"].default_value = (*c, 1); ck.inputs["Color2"].default_value = (*c2, 1)
+            nt.links.new(_floor_uv(nt, 0.6), ck.inputs["Vector"]); col = ck.outputs["Color"]
+        elif pat == "marble":
+            nz = _n(nt, "ShaderNodeTexNoise", Scale=3.0, Detail=10.0, Roughness=0.6, Distortion=2.5); nt.links.new(_floor_uv(nt, 1.0), nz.inputs["Vector"])
+            veins = _maprange(nt, nz.outputs["Fac"], 0.47, 0.53)            # thin wandering veins in a mottled ground
+            vein = _math(nt, "SUBTRACT", 1.0, _math(nt, "ABSOLUTE", _math(nt, "SUBTRACT", veins, 0.5, clamp=False), clamp=False))
+            col = _mix(nt, _math(nt, "MULTIPLY", _math(nt, "POWER", vein, 6.0), 0.55), c, c2)
+        else:
+            nz = _n(nt, "ShaderNodeTexNoise", Scale=4.0, Detail=3.0); nt.links.new(_floor_uv(nt, 1.0), nz.inputs["Vector"])
+            col = _mix(nt, _maprange(nt, nz.outputs["Fac"], 0.3, 0.7), shade(c, 0.96), shade(c, 1.04))
+        nt.links.new(col, b.inputs["Base Color"]); b.inputs["Roughness"].default_value = 0.4
+        return m
+    if t == "concrete":
+        m, nt, b = principled(name)
+        nz = _n(nt, "ShaderNodeTexNoise", Scale=1.2, Detail=8.0); nt.links.new(_floor_uv(nt, 1.0), nz.inputs["Vector"])
+        nt.links.new(_mix(nt, nz.outputs["Fac"], (0.22, 0.22, 0.21), (0.34, 0.33, 0.31)), b.inputs["Base Color"]); b.inputs["Roughness"].default_value = 0.75
+        fine = _n(nt, "ShaderNodeTexNoise", Scale=120.0, Detail=2.0); nt.links.new(_floor_uv(nt, 1.0), fine.inputs["Vector"]); _bump(nt, b, fine.outputs["Fac"], 0.1)
+        return m
+    return carpet(name, c, shade(c, 1.12))
+
+def ceiling_finish_mat(name, f):
+    t = f.get("type", "plaster")
+    if t == "tiles":
+        return brick_tiles(name, (0.86, 0.86, 0.84), (0.85, 0.85, 0.83), (0.64, 0.64, 0.62), 0.6, row=1.0, rough=0.9)
+    m = paint_mat(name, f.get("colour", "#f0eee8"), "matt", texture=0.0)
+    if t == "artex":
+        nt = m.node_tree; b = _bsdf(m)
+        sw = _n(nt, "ShaderNodeTexWave", Scale=6.0, Distortion=12.0, Detail=3.0); sw.wave_type = "RINGS"
+        nt.links.new(nt.nodes.new("ShaderNodeTexCoord").outputs["Object"], sw.inputs["Vector"]); _bump(nt, b, sw.outputs["Fac"], 0.35)
+    return m
+
+def trim_finish_mat(name, f):
+    if f.get("wood"):
+        return wood_mat(name, {"wood": f["wood"]}, floor=False)
+    return paint_mat(name, f.get("colour", "#f2f2f0"), f.get("sheen", "gloss"), texture=0.0)
+
+def apply_condition(m, surface, peelable=False):
+    """Age a finish: fade, yellowing, grime, damp tide-marks, low scuffs, peeling (walls); wear, stains, dirt (floors)."""
+    C = COND
+    if not m or not m.node_tree or not any(C.values()): return m
+    nt = m.node_tree; b = _bsdf(m)
+    if b is None: return m
+    if b.inputs["Base Color"].links: col = b.inputs["Base Color"].links[0].from_socket
+    else:
+        rgb = nt.nodes.new("ShaderNodeRGB"); rgb.outputs[0].default_value = b.inputs["Base Color"].default_value; col = rgb.outputs[0]
+    geo = nt.nodes.new("ShaderNodeNewGeometry"); sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["Position"], sep.inputs[0])
+    z = sep.outputs["Z"]
+    def noise(scale, detail=6.0, rough=0.55):
+        n = _n(nt, "ShaderNodeTexNoise", Scale=scale, Detail=detail, Roughness=rough); nt.links.new(geo.outputs["Position"], n.inputs["Vector"]); return n.outputs["Fac"]
+    if C["fade"]:
+        hs = nt.nodes.new("ShaderNodeHueSaturation"); hs.inputs["Saturation"].default_value = 1 - C["fade"]; hs.inputs["Value"].default_value = 1 - C["fade"] * 0.25
+        nt.links.new(col, hs.inputs["Color"]); col = hs.outputs[0]
+    if surface in ("wall", "ceiling", "trim") and C["yellow"]:
+        hfac = _maprange(nt, z, 0.6, RH, 0.35, 1.0) if surface != "ceiling" else 1.0
+        fac = _math(nt, "MULTIPLY", hfac, C["yellow"]) if surface != "ceiling" else C["yellow"] * 0.8
+        col = _mix(nt, fac, col, (0.86, 0.72, 0.44), "MULTIPLY")
+    if C["dirt"]:
+        if surface == "floor":
+            fac = _math(nt, "MULTIPLY", _maprange(nt, noise(1.3), 0.4, 0.75), C["dirt"])
+            col = _mix(nt, fac, col, (0.45, 0.4, 0.33), "MULTIPLY")
+        else:
+            col = add_grime(nt, col, C["dirt"] * {"trim": 0.6, "ceiling": 0.45}.get(surface, 1.0), (0.48, 0.4, 0.3), zlo=0.8 if surface == "wall" else -1, zhi=RH if surface == "wall" else 0)
+    if surface in ("wall", "ceiling") and C["damp"]:
+        n = noise(0.55, 8.0, 0.6)
+        blob = _maprange(nt, n, 0.6, 0.63)
+        inner = _maprange(nt, n, 0.635, 0.68)
+        ring = _math(nt, "SUBTRACT", blob, inner)
+        if surface == "wall":                         # rising damp at the bottom, leaks at the top
+            zf = _math(nt, "MAXIMUM", _maprange(nt, z, 1.0, 0.15), _maprange(nt, z, RH - 0.8, RH))
+        else:
+            zf = 1.0
+        stain = _math(nt, "ADD", _math(nt, "MULTIPLY", blob, 0.45), _math(nt, "MULTIPLY", ring, 0.9))
+        fac = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", stain, zf), min(1.0, C["damp"] * 1.2))
+        col = _mix(nt, fac, col, (0.55, 0.42, 0.26), "MULTIPLY")
+    if surface == "wall" and C["scuff"]:
+        band = _maprange(nt, z, 0.55, 0.12)
+        sc = _maprange(nt, noise(9.0, 4.0), 0.52, 0.72)
+        fac = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", band, sc), C["scuff"] * 0.7)
+        col = _mix(nt, fac, col, (0.5, 0.47, 0.42), "MULTIPLY")
+    if surface == "wall" and peelable and C["peel"]:
+        n = noise(1.1, 7.0, 0.65)
+        t0 = 0.72 - C["peel"] * 0.25
+        bare = _maprange(nt, n, t0, t0 + 0.015)
+        edge = _math(nt, "SUBTRACT", _maprange(nt, n, t0 - 0.03, t0), bare)
+        col = _mix(nt, _math(nt, "MULTIPLY", edge, 0.5), col, (0.3, 0.26, 0.2), "MULTIPLY")
+        col = _mix(nt, bare, col, (0.66, 0.55, 0.46))
+    if surface == "floor":
+        if C["wear"]:
+            n = _maprange(nt, noise(0.45, 4.0), 0.45, 0.7)
+            hs = nt.nodes.new("ShaderNodeHueSaturation"); hs.inputs["Saturation"].default_value = 0.6; hs.inputs["Value"].default_value = 1.18
+            nt.links.new(col, hs.inputs["Color"])
+            col = _mix(nt, _math(nt, "MULTIPLY", n, C["wear"] * 0.7), col, hs.outputs[0])
+        if C["stain"]:
+            vo = _n(nt, "ShaderNodeTexVoronoi", Scale=1.4); nt.links.new(geo.outputs["Position"], vo.inputs["Vector"])
+            sp = _maprange(nt, vo.outputs["Distance"], 0.16, 0.04)
+            wob = _maprange(nt, noise(6.0, 3.0), 0.35, 0.65)
+            fac = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", sp, wob), min(1.0, C["stain"] * 1.3))
+            col = _mix(nt, fac, col, (0.3, 0.24, 0.16), "MULTIPLY")
+    nt.links.new(col, b.inputs["Base Color"])
+    return m
+
+def finish_set(prefix, walls_f, lower_f):
+    """Materials for one wall finish (+ its lower part): returns (wall material, lower material or None, lower finish)."""
+    wm = apply_condition(wall_finish_mat(f"{prefix}_wall", walls_f), "wall", peelable=walls_f.get("type") in ("paint", "wallpaper"))
+    lf = lower_f if lower_f and lower_f.get("type", "none") != "none" else None
+    lm = None
+    if lf:
+        lm = wood_mat(f"{prefix}_lower_wood", lf, floor=False) if lf["type"] == "panelling" else wall_finish_mat(f"{prefix}_lower", lf)
+        lm = apply_condition(lm, "wall", peelable=lf["type"] in ("paint", "wallpaper"))
+    return wm, lm, lf
+
 def style_materials():
     M = {}
     if COURT:
@@ -361,6 +668,14 @@ def style_materials():
         M["frame"] = flat("Window_frame_wood_dated", (0.55, 0.5, 0.4), 0.55)
         M["door"] = flat("Door_leaf_dated", (0.6, 0.55, 0.42), 0.5)
         M["hall_wall"] = M["wall"]; M["hall_floor"] = M["floor"]
+    # the finishes chosen for this room replace the style's own walls / floor / ceiling / trim
+    M["wall"], M["lower"], M["lower_f"] = finish_set("Room", FIN.get("walls", {}), FIN.get("lower"))
+    M["floor"] = apply_condition(floor_finish_mat("Room_floor", FIN.get("floor", {})), "floor")
+    M["ceiling"] = apply_condition(ceiling_finish_mat("Room_ceiling", FIN.get("ceiling", {})), "ceiling")
+    M["trim"] = apply_condition(trim_finish_mat("Room_trim", FIN.get("trim", {})), "trim")
+    M["hall_wall"] = M["wall"]
+    if not COURT: M["hall_floor"] = M["floor"]
+    if HOME and not NEGLECT: M["k_floor"] = apply_condition(M["k_floor"], "floor")
     M["glass"] = flat("Glass", (1, 1, 1), 0.02, transmission=1.0)
     M["dark"] = flat("Dark_gap", (0.01, 0.01, 0.01), 0.8)
     M["steel"] = flat("Steel", (0.62, 0.62, 0.6), 0.25, 1.0)
@@ -389,6 +704,64 @@ def style_materials():
     return M
 
 MAT = style_materials()
+
+# per-wall and per-alcove finishes: {"walls": {...}, "lower": {...}} on spec.wall_finishes[<wall>] or an alcove's "finish";
+# anything left out is inherited (alcove <- its wall <- the room)
+_WF = SPEC.get("wall_finishes") or {}
+WALL_FINS, WALL_SET, _ALC = {}, {}, {}
+def _has(ov): return bool(ov) and (bool(ov.get("walls")) or "lower" in ov)
+for _w in ("north", "south", "east", "west"):
+    _ov = _WF.get(_w)
+    if _has(_ov):
+        WALL_FINS[_w] = (_ov.get("walls") or FIN.get("walls", {}), _ov["lower"] if "lower" in _ov else FIN.get("lower"))
+        WALL_SET[_w] = finish_set(f"Wall_{_w}", *WALL_FINS[_w])
+    else:
+        WALL_FINS[_w] = (FIN.get("walls", {}), FIN.get("lower"))
+        WALL_SET[_w] = (MAT["wall"], MAT["lower"], MAT["lower_f"])
+
+def alcove_set(ft):
+    """(wall material, lower material, lower finish) for an alcove: its own finish, else its wall's."""
+    wall = ft.get("wall"); ov = ft.get("finish")
+    if not _has(ov): return WALL_SET.get(wall, (MAT["wall"], MAT["lower"], MAT["lower_f"]))
+    key = ft.get("id") or id(ft)
+    if key not in _ALC:
+        bw, bl = WALL_FINS.get(wall, (FIN.get("walls", {}), FIN.get("lower")))
+        _ALC[key] = finish_set(f"Alcove_{key}", ov.get("walls") or bw, ov["lower"] if "lower" in ov else bl)
+    return _ALC[key]
+
+def lower_height(lf):
+    return min(float(lf.get("height", 1.15 if lf.get("type") == "panelling" else 1.2)), RH - 0.3)
+
+def lower_along(name, wall, a, b, d_face, lm, lf):
+    """Lower-wall finish (panelling with rail and stiles, or a band of tiles / paint / paper with a dado rail) on a run
+    parallel to the wall whose room-side face is at depth d_face (the room is towards smaller d)."""
+    if b - a < 0.05: return
+    H = lower_height(lf)
+    if lf.get("type") == "panelling":
+        wbox(name, wall, a, b, d_face - 0.02, d_face, 0.12, H, lm)
+        wbox(f"{name}_rail", wall, a, b, d_face - 0.04, d_face, H, H + 0.06, lm)
+        n = max(1, round((b - a) / 0.6))
+        for k in range(n + 1):
+            u = a + (b - a) * k / n
+            wbox(f"{name}_stile{k}", wall, max(a, u - 0.025), min(b, u + 0.025), d_face - 0.03, d_face, 0.12, H, lm)
+    else:
+        wbox(name, wall, a, b, d_face - 0.006, d_face, 0.0, H, lm)
+        wbox(f"{name}_rail", wall, a, b, d_face - 0.022, d_face, H, H + 0.045, MAT["trim"])
+
+def lower_side(name, wall, u_face, sgn, d0, d1, lm, lf):
+    """The same on an alcove side wall: face at u_face, the room is towards +sgn along the wall."""
+    H = lower_height(lf)
+    span = lambda t: (u_face, u_face + t) if sgn > 0 else (u_face - t, u_face)
+    if lf.get("type") == "panelling":
+        wbox(name, wall, *span(0.02), d0, d1, 0.12, H, lm)
+        wbox(f"{name}_rail", wall, *span(0.04), d0, d1, H, H + 0.06, lm)
+        n = max(1, round((d1 - d0) / 0.6))
+        for k in range(n + 1):
+            d = d0 + (d1 - d0) * k / n
+            wbox(f"{name}_stile{k}", wall, *span(0.03), max(d0, d - 0.025), min(d1, d + 0.025), 0.12, H, lm)
+    else:
+        wbox(name, wall, *span(0.006), d0, d1, 0.0, H, lm)
+        wbox(f"{name}_rail", wall, *span(0.022), d0, d1, H, H + 0.045, MAT["trim"])
 
 # ============================================================== geometry helpers
 def box_obj(name, mn, mx, m, cname="Room"):
@@ -493,7 +866,8 @@ def corner_mate(f, end):
 
 for wall, f in ({} if OUTDOOR else WALLS).items():
     lo, hi = f["lo"], f["hi"]
-    solid = wbox(f"Wall_{wall}", wall, lo - T, hi + T, 0, T, 0, RH, MAT["wall"])
+    wmat, lmat, lfin = WALL_SET[wall]
+    solid = wbox(f"Wall_{wall}", wall, lo - T, hi + T, 0, T, 0, RH, wmat)
     cutters = []
     floor_gaps = []                                  # spans along the wall where the skirting stops
     top_gaps = []                                    # spans where the cornice stops (full-height openings)
@@ -530,21 +904,16 @@ for wall, f in ({} if OUTDOOR else WALLS).items():
     if cur < hi: runs.append((cur, hi))
     for i, (a, b) in enumerate(runs):
         if b - a > 0.02: wbox(f"Skirting_{wall}_{i}", wall, a, b, -0.018, 0, 0, 0.12, MAT["trim"])
-    if COURT:                                         # oak wainscot panelling to 1.15 m with a rail and stiles
-        gaps = sorted(floor_gaps + [feature_span(x) for x in by_wall[wall] if x["type"] == "window" and float(x.get("sill", 0.8)) < 1.2])
+    if lfin:                                          # lower walls: panelling, tiles, two-tone paint or paper, with a rail
+        H = lower_height(lfin)
+        gaps = sorted(floor_gaps + [feature_span(x) for x in by_wall[wall] if x["type"] == "window" and float(x.get("sill", 0.8)) < H + 0.06])
         wr, cur = [], lo
         for g0, g1 in gaps:
             if g0 > cur: wr.append((cur, g0))
             cur = max(cur, g1)
         if cur < hi: wr.append((cur, hi))
         for i, (a, b) in enumerate(wr):
-            if b - a < 0.05: continue
-            wbox(f"Wainscot_{wall}_{i}", wall, a, b, -0.02, 0, 0.12, 1.1, MAT["panel"])
-            wbox(f"Wainscot_rail_{wall}_{i}", wall, a, b, -0.04, 0, 1.1, 1.16, MAT["panel"])
-            n = max(1, round((b - a) / 0.6))
-            for k in range(n + 1):
-                u = a + (b - a) * k / n
-                wbox(f"Wainscot_stile_{wall}_{i}_{k}", wall, max(a, u - 0.025), min(b, u + 0.025), -0.03, 0, 0.12, 1.1, MAT["panel"])
+            lower_along(f"Lower_{wall}_{i}", wall, a, b, 0.0, lmat, lfin)
     # cornice / coving along the top
     runs, cur = [], lo
     for g0, g1 in sorted(top_gaps):
@@ -564,14 +933,15 @@ def panel_light(name, at, along_x=True, energy=150, size=(1.2, 0.6)):
     l = bpy.context.active_object; l.name = name; l.data.shape = "RECTANGLE"; l.data.size, l.data.size_y = sx * 0.95, sy * 0.95
     l.data.energy = energy; l.data.color = (1.0, 0.97, 0.93); put(l, "Lights")
 
-def recess(ft, wall, depth, h, name, floor_m=None):
+def recess(ft, wall, depth, h, name, floor_m=None, lower=True):
     """A recess beyond the wall line: back wall, two side walls, floor and ceiling zone."""
     u0, u1 = feature_span(ft)
     mlo, mhi = corner_mate(ft, "lo"), corner_mate(ft, "hi")     # recesses meeting this one in a corner
     dlo, dhi = (fdepth(mlo) if mlo else 0.0), (fdepth(mhi) if mhi else 0.0)
-    wbox(f"{name}_back", wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, MAT["wall"])
-    if not mlo: wbox(f"{name}_side_a", wall, u0 - T, u0, T * 0, depth + T, 0, RH, MAT["wall"])
-    if not mhi: wbox(f"{name}_side_b", wall, u1, u1 + T, T * 0, depth + T, 0, RH, MAT["wall"])
+    amat, almat, alfin = alcove_set(ft)
+    wbox(f"{name}_back", wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, amat)
+    if not mlo: wbox(f"{name}_side_a", wall, u0 - T, u0, T * 0, depth + T, 0, RH, amat)
+    if not mhi: wbox(f"{name}_side_b", wall, u1, u1 + T, T * 0, depth + T, 0, RH, amat)
     mn, mx = wbox_world(wall, u0, u1, T / 2, depth, 0, 0)
     zones.append((name, mn, mx, floor_m or MAT["floor"], h))
     for m_, a, b, tag in ((mlo, u0 - dlo, u0, "lo"), (mhi, u1, u1 + dhi, "hi")):   # the opened-up corner square
@@ -587,20 +957,10 @@ def recess(ft, wall, depth, h, name, floor_m=None):
         if not mhi: wbox(f"{name}_{tag}_b", wall, u1 - t, u1, d0, depth, z0, z1, m)
     trim_round("skirt", 0.018, 0, 0.12, MAT["trim"])
     trim_round("cornice", 0.05, top - 0.05, top, MAT["trim"], wrap=full)
-    if COURT:
-        trim_round("wainscot", 0.02, 0.12, 1.1, MAT["panel"])
-        trim_round("wainscot_rail", 0.04, 1.1, 1.16, MAT["panel"])
-        a, b = u0 - dlo, u1 + dhi                                # stiles on the back wall...
-        n = max(1, round((b - a) / 0.6))
-        for k in range(n + 1):
-            u = a + (b - a) * k / n
-            wbox(f"{name}_stile_back_{k}", wall, max(a, u - 0.025), min(b, u + 0.025), depth - 0.03, depth, 0.12, 1.1, MAT["panel"])
-        n = max(1, round(depth / 0.6))                          # ...and along each side
-        for side, (ua, ub) in (("a", (u0, u0 + 0.03)), ("b", (u1 - 0.03, u1))):
-            if (side == "a" and mlo) or (side == "b" and mhi): continue
-            for k in range(n + 1):
-                d = depth * k / n
-                wbox(f"{name}_stile_{side}_{k}", wall, ua, ub, max(-0.02, d - 0.025), min(depth, d + 0.025), 0.12, 1.1, MAT["panel"])
+    if lower and alfin:                              # the lower-wall finish carries on round the inside too
+        lower_along(f"{name}_lower_back", wall, u0 - dlo, u1 + dhi, depth, almat, alfin)
+        if not mlo: lower_side(f"{name}_lower_a", wall, u0, +1, -0.02, depth, almat, alfin)
+        if not mhi: lower_side(f"{name}_lower_b", wall, u1, -1, -0.02, depth, almat, alfin)
     if depth > 1.2:                                 # deep bays need their own light
         cu = (u0 + u1) / 2
         if HOSPITAL or COURT:
@@ -693,7 +1053,7 @@ def window(ft, wall):
     rw = min(1.1, (u1 - u0) * 0.9); rc = (u0 + u1) / 2
     if sill > 0.45 and sill < 1.5 and not CUSTODY:
         wbox(f"{ft.get('id', 'window')}_radiator", wall, rc - rw / 2, rc + rw / 2, -0.11, -0.04, 0.14, min(sill - 0.1, 0.65), MAT["radiator"])
-    dressing = ft.get("dressing") or {"neglected": "nets_curtains", "hospital": "blinds", "court": "blinds", "custody": "frosted"}.get(STYLE, "none")
+    dressing = ft.get("dressing") or {"neglected": "nets_curtains", "hospital": "blinds", "court": "blinds", "custody": "frosted"}.get("neglected" if NEGLECT else STYLE, "none")
     fid = ft.get('id', 'window')
     if dressing == "frosted":
         glass = bpy.data.objects.get(f"{fid}_glass")
@@ -990,7 +1350,7 @@ for ft in FEATURES:
             if ft.get("shelves"): shelves(ft, wall, depth, int(ft["shelves"]))
         elif typ == "kitchenette":
             depth = float(ft.get("depth", 0.65))
-            u0, u1 = recess(ft, wall, depth, RH, ft.get("id", "kitchenette"), floor_m=MAT["k_floor"])
+            u0, u1 = recess(ft, wall, depth, RH, ft.get("id", "kitchenette"), floor_m=MAT["k_floor"], lower=False)
             kitchen_run(wall, u0, u1, depth, ft.get("id", "kitchenette"))
         elif typ == "window": window(ft, wall)
         elif typ == "door": door(ft, wall)
@@ -1131,7 +1491,7 @@ sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage 
 try:
     sc.view_settings.view_transform = "AgX"
 except Exception: pass
-sc.view_settings.exposure = {"day": 0.6, "dusk": 0.9, "night": 0.9}.get(LIGHTING, 0.6) + (0.35 if NEGLECT else 0.0) - (0.5 if HOSPITAL else 0.0) \
+sc.view_settings.exposure = {"day": 0.6, "dusk": 0.9, "night": 0.9}.get(LIGHTING, 0.6) + (0.35 if NEGLECT else {"worn": 0.1, "neglected": 0.25, "derelict": 0.35}.get(CONDITION, 0.0)) - (0.5 if HOSPITAL else 0.0) \
     - (0.55 if COURT else 0.0) - (0.4 if CUSTODY else 0.0)
 if OUTDOOR: sc.view_settings.exposure = {"day": 0.0, "dusk": 0.5, "night": 1.0}.get(LIGHTING, 0.0) + float(SPEC.get("render", {}).get("exposure", 0))
 sc.render.film_transparent = False

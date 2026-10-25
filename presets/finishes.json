@@ -1,0 +1,123 @@
+{
+  "_note": "Room finishes and condition. Colours are sRGB hex. 'presets' are what each room type starts with; anything can then be changed in the builder. Read by the builder (choices) and by generator/generate.py (materials).",
+
+  "palettes": {
+    "paint": [
+      ["Brilliant white", "#f2f2ee"], ["Magnolia", "#efe5cf"], ["Cream", "#ece0bd"], ["Pale grey", "#d8d9d5"],
+      ["Dove grey", "#b6b5ae"], ["Duck egg", "#cddfd6"], ["Sage", "#b3c1a0"], ["Hospital green", "#cfdfcb"],
+      ["Pale blue", "#c8d7e3"], ["Peach", "#efcaa9"], ["Mustard", "#d4a23c"], ["Terracotta", "#bd6a4a"],
+      ["Burgundy", "#6c2a2e"], ["Navy", "#2b3a55"], ["Forest green", "#2f4a36"], ["Charcoal", "#3b3d40"]
+    ],
+    "carpet": [
+      ["Navy", "#1f2c4c"], ["Court blue", "#2b3f6d"], ["Charcoal", "#3a3b3e"], ["Mid grey", "#77787a"],
+      ["Beige", "#b5a384"], ["Oatmeal", "#cbbd9f"], ["Brown", "#5a4330"], ["Burgundy", "#5d2329"],
+      ["Red", "#8a2b27"], ["Green", "#3a5236"], ["Teal", "#2f5b5c"], ["Gold", "#a9853f"]
+    ],
+    "tiles": [
+      ["White", "#efefeb"], ["Cream", "#e6ddc6"], ["Light grey", "#c4c5c1"], ["Mid grey", "#9a9b97"],
+      ["Black", "#1d1d1f"], ["Sage", "#a7b698"], ["Blue", "#6e8dac"], ["Navy", "#2d3d5a"],
+      ["Avocado", "#8b8f4b"], ["Brown", "#78593a"], ["Terracotta", "#b3633f"], ["Pink", "#e3b8b0"]
+    ],
+    "vinyl": [
+      ["Blue grey", "#6f7f88"], ["Grey", "#8c8f8f"], ["Light grey", "#b5b8b6"], ["Blue", "#56708a"],
+      ["Green", "#6f8a6c"], ["Beige", "#b9ab8e"], ["Brown", "#7a604a"], ["Red", "#8e3c34"]
+    ],
+    "wallpaper": [
+      ["White", "#efece4"], ["Cream", "#e9dfc3"], ["Gold", "#c9a85e"], ["Sage", "#a9b593"],
+      ["Duck egg", "#c7d9cf"], ["Pink", "#e2b9b0"], ["Burgundy", "#6e2a30"], ["Brown", "#6b5136"],
+      ["Navy", "#2c3b57"], ["Green", "#3d5a3f"], ["Orange", "#c8783a"], ["Grey", "#9a9a95"]
+    ]
+  },
+
+  "surfaces": {
+    "walls": {
+      "paint":     { "name": "Paint", "options": ["colour", "sheen"] },
+      "wallpaper": { "name": "Wallpaper", "options": ["pattern", "colour", "colour2"] },
+      "tiles":     { "name": "Tiles", "options": ["tile_size", "colour", "grout"] },
+      "blockwork": { "name": "Painted blockwork", "options": ["colour"] },
+      "brick":     { "name": "Bare brick", "options": ["brick"] },
+      "panelling": { "name": "Wood panelling", "options": ["wood"] },
+      "plaster":   { "name": "Bare plaster", "options": [] }
+    },
+    "lower": {
+      "none":      { "name": "None (same as the wall)" },
+      "panelling": { "name": "Wood panelling", "options": ["wood", "height"] },
+      "tiles":     { "name": "Tiles", "options": ["tile_size", "colour", "grout", "height"] },
+      "paint":     { "name": "Paint (two-tone)", "options": ["colour", "sheen", "height"] },
+      "wallpaper": { "name": "Wallpaper", "options": ["pattern", "colour", "colour2", "height"] }
+    },
+    "floor": {
+      "carpet":   { "name": "Carpet", "options": ["carpet_pattern", "colour", "colour2"] },
+      "wood":     { "name": "Wood boards", "options": ["wood"] },
+      "laminate": { "name": "Laminate", "options": ["wood"] },
+      "vinyl":    { "name": "Vinyl (speckled)", "options": ["colour"] },
+      "lino":     { "name": "Lino", "options": ["lino_pattern", "colour", "colour2"] },
+      "tiles":    { "name": "Tiles", "options": ["tile_size", "colour", "colour2", "grout"] },
+      "resin":    { "name": "Resin (custody / clinical)", "options": ["colour"] },
+      "concrete": { "name": "Bare concrete", "options": [] }
+    },
+    "ceiling": {
+      "plaster":   { "name": "Plaster", "options": ["colour"] },
+      "tiles":     { "name": "Suspended tiles", "options": [] },
+      "artex":     { "name": "Artex (textured)", "options": ["colour"] }
+    }
+  },
+
+  "options": {
+    "sheen": [["matt", "Matt"], ["silk", "Silk"], ["gloss", "Gloss"]],
+    "pattern": [["woodchip", "Woodchip (plain)"], ["stripe", "Regency stripe"], ["pinstripe", "Pinstripe"], ["trellis", "Trellis"],
+                ["floral", "Floral"], ["damask", "Damask"], ["geometric", "1970s geometric"], ["vintage", "Vintage (photo, faded)"]],
+    "tile_size": [["metro", "Metro 20 x 10"], ["sq10", "Square 10 cm"], ["sq15", "Square 15 cm"], ["sq30", "Square 30 cm"], ["sq60", "Large 60 cm"]],
+    "wood": [["light_oak", "Light oak"], ["oak", "Oak"], ["dark_oak", "Dark oak"], ["pine", "Pine"], ["grey", "Grey-washed"], ["painted", "Painted (uses colour)"]],
+    "brick": [["red", "Red brick"], ["yellow", "London stock"], ["painted", "Painted white"]],
+    "carpet_pattern": [["plain", "Plain"], ["heather", "Heather (two-tone)"], ["patterned", "Patterned (floral)"], ["cord", "Cord (stripes)"]],
+    "lino_pattern": [["plain", "Plain"], ["check", "Check"], ["marble", "Marbled"]]
+  },
+
+  "conditions": [
+    ["new", "New", "Freshly decorated: clean, crisp, no wear."],
+    ["lived_in", "Lived-in", "Clean but used: a few scuffs and marks low on the walls, light wear on floors."],
+    ["worn", "Worn", "Tired and faded: scuffs, marks, grubby patches, worn floor paths."],
+    ["neglected", "Neglected", "Dirty and stained: yellowed walls, damp patches, stained floors, some peeling."],
+    ["derelict", "Derelict", "Badly damaged: big damp stains, peeling paper and paint, filthy floors."]
+  ],
+
+  "presets": {
+    "modern": {
+      "walls": { "type": "paint", "colour": "#ece7dd", "sheen": "matt" },
+      "lower": { "type": "none" },
+      "floor": { "type": "wood", "wood": "light_oak" },
+      "ceiling": { "type": "plaster", "colour": "#f0eee8" },
+      "trim": { "colour": "#f2f2f0", "sheen": "gloss" }
+    },
+    "neglected": {
+      "walls": { "type": "wallpaper", "pattern": "vintage", "colour": "#d8c79a", "colour2": "#8c6a3e" },
+      "lower": { "type": "none" },
+      "floor": { "type": "carpet", "carpet_pattern": "patterned", "colour": "#5d2329", "colour2": "#a9853f" },
+      "ceiling": { "type": "artex", "colour": "#ece2c8" },
+      "trim": { "colour": "#e8dcc0", "sheen": "gloss" },
+      "condition": "neglected"
+    },
+    "hospital": {
+      "walls": { "type": "paint", "colour": "#d3e2d1", "sheen": "silk" },
+      "lower": { "type": "none" },
+      "floor": { "type": "vinyl", "colour": "#6f7f88" },
+      "ceiling": { "type": "tiles" },
+      "trim": { "colour": "#66737b", "sheen": "silk" }
+    },
+    "court": {
+      "walls": { "type": "paint", "colour": "#e2dccc", "sheen": "matt" },
+      "lower": { "type": "panelling", "wood": "oak", "height": 1.15 },
+      "floor": { "type": "carpet", "carpet_pattern": "plain", "colour": "#24355c" },
+      "ceiling": { "type": "tiles" },
+      "trim": { "colour": "#5a3a1e", "sheen": "silk", "wood": "oak" }
+    },
+    "custody": {
+      "walls": { "type": "blockwork", "colour": "#e4e1d2" },
+      "lower": { "type": "none" },
+      "floor": { "type": "resin", "colour": "#5b6870" },
+      "ceiling": { "type": "plaster", "colour": "#e6e6e2" },
+      "trim": { "colour": "#4a555f", "sheen": "silk" }
+    }
+  }
+}
