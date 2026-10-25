@@ -2,107 +2,28 @@
   "version": 1,
   "name": "UK police custody cell",
   "room": {
-    "preset": "custom",
-    "width": 2.6,
-    "depth": 3.4,
-    "height": 2.6,
+    "preset": "igloo-main",
+    "width": 6.4,
+    "depth": 5.71,
+    "height": 2.244,
     "eye": 1.12,
-    "projected": {
-      "walls": true,
-      "floor": true,
-      "ceiling": false
-    }
+    "projected": { "walls": true, "floor": true, "ceiling": false }
   },
   "style": "custody",
   "lighting": "day",
-  "outside": {
-    "view": "estate",
-    "rotation": 0
-  },
+  "outside": { "view": "estate", "rotation": 0 },
   "features": [
-    {
-      "id": "plinth-recess",
-      "type": "alcove",
-      "wall": "west",
-      "pos": 0.45,
-      "width": 2.5,
-      "depth": 0.72
-    },
-    {
-      "id": "north-wall-back",
-      "type": "alcove",
-      "wall": "north",
-      "pos": 0.0,
-      "width": 2.6,
-      "depth": 1.05
-    },
-    {
-      "id": "cell-door",
-      "type": "door",
-      "wall": "south",
-      "pos": -0.3,
-      "width": 0.9,
-      "height": 2.05,
-      "beyond": "closed"
-    },
-    {
-      "id": "high-window",
-      "type": "window",
-      "wall": "east",
-      "pos": 0.5,
-      "width": 0.9,
-      "sill": 1.9,
-      "height": 0.45,
-      "dressing": "frosted"
-    }
+    { "id": "plinth-recess", "type": "alcove", "wall": "west", "pos": 1.605, "width": 2.5, "depth": 0.72 },
+    { "id": "north-wall-back", "type": "alcove", "wall": "north", "pos": 0.0, "width": 6.4, "depth": 1.05 },
+    { "id": "cell-door", "type": "door", "wall": "south", "pos": -0.6, "width": 0.9, "height": 2.05, "beyond": "closed" },
+    { "id": "high-window", "type": "window", "wall": "east", "pos": 0.6, "width": 1.0, "sill": 1.55, "height": 0.45, "dressing": "frosted" }
   ],
   "items": [
-    {
-      "id": "plinth",
-      "model": "rb_cell_bench",
-      "x": -1.66,
-      "y": 0.3,
-      "z": 0,
-      "rot": 90,
-      "scale": 1
-    },
-    {
-      "id": "toilet",
-      "model": "rb_cell_toilet",
-      "x": 0.95,
-      "y": 2.35,
-      "z": 0,
-      "rot": 0,
-      "scale": 1
-    },
-    {
-      "id": "cctv",
-      "model": "rb_cctv_dome",
-      "x": 1.1,
-      "y": -1.45,
-      "z": 2.48,
-      "rot": 0,
-      "scale": 1
-    },
-    {
-      "id": "call",
-      "model": "rb_cell_call_point",
-      "x": 0.45,
-      "y": -1.688,
-      "z": 1.1,
-      "rot": 180,
-      "scale": 1
-    }
+    { "id": "plinth", "model": "rb_cell_bench", "x": -3.56, "y": 1.605, "z": 0, "rot": 90, "scale": 1 },
+    { "id": "toilet", "model": "rb_cell_toilet", "x": 2.85, "y": 3.505, "z": 0, "rot": 0, "scale": 1 },
+    { "id": "cctv", "model": "rb_cctv_dome", "x": 2.9, "y": -2.6, "z": 2.124, "rot": 0, "scale": 1 },
+    { "id": "call", "model": "rb_cell_call_point", "x": 0.4, "y": -2.843, "z": 1.1, "rot": 180, "scale": 1 }
   ],
-  "views": [
-    {
-      "name": "centre",
-      "x": 0,
-      "y": 0,
-      "yaw": 0
-    }
-  ],
-  "render": {
-    "quality": "standard"
-  }
+  "views": [ { "name": "centre", "x": 0, "y": 0, "yaw": 0 } ],
+  "render": { "quality": "standard" }
 }

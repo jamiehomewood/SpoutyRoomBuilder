@@ -1091,7 +1091,11 @@ lights_on = LIGHTING in ("dusk", "night") or SPEC.get("lights_on", True)
 if OUTDOOR:
     pass
 elif CUSTODY:                                       # one recessed anti-ligature light, off the zenith
-    panel_light("Cell_light", Vector((0, min(0.8, D / 4), 0)), along_x=True, energy=55, size=(0.9, 0.3))
+    if W * D <= 12:
+        panel_light("Cell_light", Vector((0, min(0.8, D / 4), 0)), along_x=True, energy=55, size=(0.9, 0.3))
+    else:                                           # bigger rooms (e.g. a cell at Igloo-room size): two fittings
+        for i, fx in enumerate((-1, 1)):
+            panel_light(f"Cell_light_{i}", Vector((fx * W / 4, D / 6, 0)), along_x=True, energy=55 * min(2.0, W * D / 16), size=(0.9, 0.3))
 elif COURT:
     for i, (fx, fy) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
         panel_light(f"Panel_{i}", Vector((fx * W / 4, fy * D / 4, 0)), along_x=True, energy=70)

@@ -536,6 +536,7 @@ function tabRoom(body) {
       el('label', { class: 'chk', style: 'background:none;border:0;padding:0' },
       el('input', { type: 'checkbox', checked: !!r.projected?.ceiling, onchange: e => { r.projected = { ...(r.projected || {}), ceiling: e.target.checked }; changed({ rebuild: false }); } }), 'Ceiling')),
     custom ? el('div', { class: 'row' }, el('label', {}), el('button', { onclick: saveCustomPreset }, 'Save this size as a room')) : null,
+    custom ? el('p', { class: 'note warn' }, 'The render only lines up in a physical room of exactly this size. Projected into a bigger or smaller room, everything is the wrong scale: furniture lands on the floor and the top of the walls is lost. Keep the measured room size even for a smaller place such as a cell: the walls can be pushed back with alcoves but not brought in.') : null,
     el('h4', {}, 'Look'),
     row('Style', radio('style', [['modern', 'Modern'], ['neglected', 'Neglected'], ['hospital', 'Hospital'], ['court', 'Court'], ['custody', 'Custody'], ['outdoor', 'Outdoor']], spec.style, v => { spec.style = v; changed({ structural: true }); })),
     row('Light', radio('light', [['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night']], spec.lighting, v => { spec.lighting = v; changed({ structural: true }); })),
