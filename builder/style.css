@@ -57,6 +57,9 @@ h4 { margin: 16px 0 8px; font-size: 13px; color: var(--muted); text-transform: u
 .row { display: flex; gap: 8px; align-items: center; margin: 7px 0; }
 .row > label:first-child { width: 120px; color: var(--muted); flex: none; }
 .row .grow { flex: 1; }
+.row > .radio, .row > .chks { flex: 1; min-width: 0; }            /* option groups wrap inside the panel */
+.chks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.row select { min-width: 0; max-width: 100%; }
 .note { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin: 6px 0; }
 .note.warn { color: #f0c27a; }
 .note.bad { color: #ff9f98; }

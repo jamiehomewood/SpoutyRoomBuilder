@@ -622,7 +622,8 @@ function tabWalls(body) {
     body.append(el('h4', {}, `${wall} wall · ${r2(wallLen(wall))} m`));
     for (const f of fs) {
       const probs = featureProblems(f);
-      const card = el('div', { class: 'card' + (sel?.kind === 'feature' && sel.id === f.id ? ' sel' : '') + (probs.length ? ' err' : ''), onclick: e => { if (e.target === card || e.target.closest('.head')) select({ kind: 'feature', id: f.id }, false); } });
+      const card = el('div', { class: 'card' + (sel?.kind === 'feature' && sel.id === f.id ? ' sel' : '') + (probs.length ? ' err' : ''), onclick: e => { if (e.target.closest('select, button, input, label, textarea')) return;   // controls work without redrawing the card
+        if (e.target === card || e.target.closest('.head')) select({ kind: 'feature', id: f.id }, false); } });
       const L = wallLen(f.wall);
       const live = () => { rebuildRoom(); drawOverlay(); };
       const commit = () => changed({ structural: true });
@@ -739,8 +740,8 @@ function modelDetailCard(m) {
     row('Status', el('select', { onchange: e => saveModel(m, { status: e.target.value }) },
       [['room-tested', 'Room-tested (works in the room)'], ['untested', 'Untested'], ['rejected', 'Rejected (hide it)']].map(([v, l]) => el('option', { value: v, selected: v === m.status }, l)))),
     row('Type', el('input', { type: 'text', class: 'grow', value: m.category || '', onchange: e => saveModel(m, { category: e.target.value.trim() || 'misc' }) })),
-    row('Suits', ['modern', 'neglected', 'hospital', 'court', 'custody', 'outdoor'].map(s => el('label', { class: 'chk', style: 'background:none;border:0;padding:0' },
-      el('input', { type: 'checkbox', checked: (m.styles || []).includes(s), onchange: e => { const st = new Set(m.styles || []); e.target.checked ? st.add(s) : st.delete(s); saveModel(m, { styles: [...st] }); } }), s))),
+    row('Suits', el('div', { class: 'chks' }, ['modern', 'neglected', 'hospital', 'court', 'custody', 'outdoor'].map(s => el('label', { class: 'chk', style: 'background:none;border:0;padding:0' },
+      el('input', { type: 'checkbox', checked: (m.styles || []).includes(s), onchange: e => { const st = new Set(m.styles || []); e.target.checked ? st.add(s) : st.delete(s); saveModel(m, { styles: [...st] }); } }), s)))),
     mode === 'advanced' ? row('Default scale', numIn(m.scale ?? 1, 0.01, v => saveModel(m, { scale: v }))) : null,
     el('div', { class: 'note' }, 'Room notes (scale checked, safe on the floor, reads from the centre…)'),
     el('textarea', { onchange: e => saveModel(m, { notes: e.target.value }) }, m.notes || ''),
