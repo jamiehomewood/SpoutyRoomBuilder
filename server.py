@@ -248,6 +248,54 @@ def sketchfab_import(uid):
     return meta
 
 # ------------------------------------------------------------------ library
+# ---- decals (catalogue/decals/decals.json + image files)
+DECALS = os.path.join(ROOT, "catalogue", "decals")
+
+def image_size(b):
+    """(width, height) of PNG or JPEG bytes, using only the standard library."""
+    if b[:8] == b"\x89PNG\r\n\x1a\n": return int.from_bytes(b[16:20], "big"), int.from_bytes(b[20:24], "big")
+    if b[:2] == b"\xff\xd8":
+        i = 2
+        while i < len(b) - 9:
+            if b[i] != 0xFF: i += 1; continue
+            m = b[i + 1]; ln = int.from_bytes(b[i + 2:i + 4], "big")
+            if m in (0xC0, 0xC1, 0xC2): return int.from_bytes(b[i + 7:i + 9], "big"), int.from_bytes(b[i + 5:i + 7], "big")
+            i += 2 + ln
+    raise ValueError("Only PNG and JPEG images can be used as decals")
+
+def decals_list():
+    return load_json(os.path.join(DECALS, "decals.json"), {"decals": []})
+
+def decal_upload(data):
+    import base64
+    raw = data.get("data", "")
+    if "," in raw: raw = raw.split(",", 1)[1]
+    b = base64.b64decode(raw)
+    if len(b) > 20 * 1024 * 1024: raise ValueError("That image is over 20 MB")
+    w, h = image_size(b)
+    ext = "png" if b[:4] == b"\x89PNG" else "jpg"
+    name = (data.get("name") or "My decal").strip()[:60]
+    did = "up_" + slug(name, 30) + "_" + uuid.uuid4().hex[:6]
+    os.makedirs(DECALS, exist_ok=True)
+    with open(os.path.join(DECALS, f"{did}.{ext}"), "wb") as fh: fh.write(b)
+    idx = decals_list()
+    entry = {"id": did, "name": name, "file": f"{did}.{ext}", "width": float(data.get("width") or 0.5), "aspect": round(h / w, 4),
+             "category": data.get("category") or "uploaded", "source": "Uploaded", "licence": (data.get("licence") or "").strip()[:120]}
+    idx["decals"].append(entry); save_json(os.path.join(DECALS, "decals.json"), idx)
+    return entry
+
+def decal_remove(did):
+    idx = decals_list(); keep, gone = [], None
+    for d in idx["decals"]:
+        if d["id"] == did and d.get("source") != "Room Builder": gone = d
+        else: keep.append(d)
+    if not gone: raise ValueError("Only uploaded decals can be removed")
+    rm = os.path.join(DECALS, "_removed"); os.makedirs(rm, exist_ok=True)
+    try: shutil.move(os.path.join(DECALS, gone["file"]), os.path.join(rm, gone["file"]))
+    except Exception: pass
+    save_json(os.path.join(DECALS, "decals.json"), {"decals": keep})
+    return {"ok": True}
+
 def credits_for(model_ids):
     lines = ["# Credits", "", "Models used in this room and their licences.", ""]
     need, free = [], []
@@ -420,6 +468,12 @@ def run_job(job):
     if outside.get("hdri"):
         h = outside["hdri"]
         credits = credits.replace("Room shell, kitchen and lighting", f"Outside view: \"{h}\", Poly Haven (https://polyhaven.com/a/{h}), CC0 (no credit required)\n\nRoom shell, kitchen and lighting")
+    decals = load_json(os.path.join(out, "used_decals.json"), {})
+    if decals:                                       # decals: own work, or uploaded by whoever made the room
+        own = [d["name"] for d in decals.values() if d.get("source") == "Room Builder"]
+        up = [f"{d['name']} ({d.get('licence') or 'licence not given'})" for d in decals.values() if d.get("source") != "Room Builder"]
+        extra = ["## Decals", ""] + [f"- {n}: own work (Room Builder)" for n in own] + [f"- {n}: uploaded image" for n in up] + [""]
+        credits = credits.replace("Room shell, kitchen and lighting", "\n".join(extra) + "\nRoom shell, kitchen and lighting")
     with open(os.path.join(ldir, "credits.md"), "w", encoding="utf-8") as fh: fh.write(credits)
     save_json(os.path.join(ldir, "spec.json"), job["spec"])
     spec = job["spec"]; rx, ry, smp = QUALITIES.get(job["quality"], QUALITIES["standard"])
@@ -490,6 +544,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/catalogue": return self.send_json(catalogue_list())
             if path == "/api/outside": return self.send_json(load_json(os.path.join(PRESETS, "outside.json"), {"views": []}))
             if path == "/api/finishes": return self.send_json(load_json(os.path.join(PRESETS, "finishes.json"), {"presets": {}}))
+            if path == "/api/decals": return self.send_json(decals_list())
             m = re.fullmatch(r"/api/hdri/([A-Za-z0-9_\-]+)\.png", path)
             if m:                                   # small equirect preview of an outside view, for the live builder
                 d = os.path.join(ROOT, "textures", "hdri"); os.makedirs(d, exist_ok=True)
@@ -569,6 +624,8 @@ class Handler(SimpleHTTPRequestHandler):
                 save_json(p, cur); return self.send_json(room)
             m = re.fullmatch(r"/api/catalogue/([\w\-]+)", path)
             if m: return self.send_json(catalogue_update(m.group(1), data))
+            if path == "/api/decals": return self.send_json(decal_upload(data))
+            if path.startswith("/api/decals/") and path.endswith("/remove"): return self.send_json(decal_remove(path.split("/")[3]))
             if path == "/api/import/polyhaven": return self.send_json(polyhaven_import(data["id"]))
             if path == "/api/import/sketchfab": return self.send_json(sketchfab_import(data["uid"]))
             if path == "/api/rooms":

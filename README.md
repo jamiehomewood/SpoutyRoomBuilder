@@ -46,6 +46,10 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
    Drag them in Plan view; **R** rotates, **Back to wall** pushes one against the nearest wall facing into the room.
    A model dragged over a table, bed or worktop sits on it; **Height** lifts it to any height (e.g. a camera on the wall),
    **Put on what's below** and **On the floor** set it back down.
+   **Decals** (Models tab > Decals): drawings, graffiti, posters, signs and damage (mould, damp, cracks) stuck on any wall,
+   the back of an alcove or the floor. Click one, then click where it goes in 3D or Eye view; sliders set position, size,
+   turn and opacity. **Add your own image** (PNG with a transparent background, or JPG) with its real width and licence;
+   the licence goes into each render's credits. The starter set is own work, made by `tools/make_decals.py`.
    A red outline and the warning box mean a model reaches onto the projected floor.
    **Outside** (Room tab): every window and outside door looks out on a real 360° photo from Poly Haven (CC0), which
    also lights the room. Pick garden, street, hospital grounds, car park or upper floor; day / dusk / night follows the

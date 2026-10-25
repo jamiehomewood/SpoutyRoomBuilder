@@ -1,7 +1,7 @@
 // Room Builder - the builder page.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildRoom, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId, runDown, finishColour } from './scene.js';
+import { buildRoom, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId, runDown, finishColour, setDecalCatalogue, decalPlacement } from './scene.js';
 
 // ================================================================== state
 // append() that skips null/false, so panels can include optional parts inline
@@ -37,6 +37,8 @@ const WALLNAMES = ['north', 'east', 'south', 'west'];
 const FEATURE_LABEL = { alcove: 'Alcove', door: 'Door', window: 'Window', arch: 'Arch', kitchenette: 'Kitchenette' };
 
 let presets = [];
+let decalCat = [];                       // catalogue/decals/decals.json
+let placingDecal = null;                  // index of the decal waiting for a click on a wall / floor
 let finCfg = { presets: {}, surfaces: {}, palettes: {}, options: {}, conditions: [] };   // presets/finishes.json
 const clone = o => JSON.parse(JSON.stringify(o));
 // what each room type starts with (finishes only; the condition is kept when the type changes)
@@ -94,7 +96,7 @@ function changed({ structural = false, rebuild = true, items = false } = {}) {
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); spec = JSON.parse(undoStack.pop()); lastSnap = snapshot(); afterLoad(false); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); spec = JSON.parse(redoStack.pop()); lastSnap = snapshot(); afterLoad(false); }
 function loadSpec(s, resetUndo = true) {
-  spec = normaliseLook(s); spec.features ||= []; spec.items ||= []; spec.views ||= [{ name: 'centre', x: 0, y: 0, yaw: 0 }];
+  spec = normaliseLook(s); spec.features ||= []; spec.items ||= []; spec.decals ||= []; spec.views ||= [{ name: 'centre', x: 0, y: 0, yaw: 0 }];
   spec.render ||= { quality: 'standard' };
   for (const f of spec.features) f.id ||= uid(f.type);
   for (const i of spec.items) i.id ||= uid('item');
@@ -293,6 +295,19 @@ function featureProblems(f) {
 function allWarnings() {
   const out = [];
   for (const f of spec.features) for (const p of featureProblems(f)) out.push({ text: `${FEATURE_LABEL[f.type]} (${f.wall}): ${p}`, sel: { kind: 'feature', id: f.id } });
+  (spec.decals || []).forEach((dc, i) => {                // a wall decal hanging over a doorway, window, arch or alcove opening
+    if (dc.surface === 'floor' || String(dc.surface).startsWith('alcove:')) return;
+    const P = decalPlacement(spec, dc); if (!P) return;
+    const a = Math.abs((+dc.rot || 0) * Math.PI / 180), hw = (P.w * Math.abs(Math.cos(a)) + P.h * Math.abs(Math.sin(a))) / 2, hh = (P.h * Math.abs(Math.cos(a)) + P.w * Math.abs(Math.sin(a))) / 2;
+    const u0 = +dc.u - hw, u1 = +dc.u + hw, z0 = +dc.z - hh, z1 = +dc.z + hh;
+    const hit = spec.features.find(f => {
+      if (f.wall !== dc.surface) return false;
+      const [f0, f1] = span(f); if (u1 <= f0 || u0 >= f1) return false;
+      const fz0 = f.type === 'window' ? +(f.sill ?? 0.8) : 0, fz1 = f.type === 'window' ? fz0 + +(f.height ?? 1.2) : (f.type === 'door' ? +(f.height ?? 2) : roomFrame(spec).RH);
+      return z1 > fz0 && z0 < fz1;
+    });
+    if (hit) out.push({ text: `Decal "${decalCat.find(d => d.id === dc.decal)?.name || dc.decal}" hangs over the ${FEATURE_LABEL[hit.type].toLowerCase()} opening on the ${dc.surface} wall`, sel: { kind: 'decal', id: i } });
+  });
   if (spec.room.projected?.floor !== false) for (const it of spec.items) {
     const g = itemObjs.get(it.id); if (!g || !g.userData.size) continue;
     const d = floorDepth(footprint(g, it, catById(it.model)));
@@ -320,7 +335,9 @@ function pickAt(e) {
   setNdc(e);
   const hitsV = ray.intersectObjects(overlay.children.filter(o => o.userData.viewIndex !== undefined), false);
   if (hitsV.length) return { kind: 'view', id: hitsV[0].object.userData.viewIndex };
+  const dh = built?.decals ? ray.intersectObjects(built.decals.children, false) : [];
   const hits = ray.intersectObjects([...itemHolder.children, ...(built?.pick || [])], true);
+  if (dh.length && (!hits.length || dh[0].distance <= hits[0].distance + 0.02)) return { kind: 'decal', id: dh[0].object.userData.decalIndex };
   for (const h of hits) {
     let o = h.object;
     while (o && o.userData.itemId === undefined && o.userData.featureId === undefined) o = o.parent;
@@ -353,7 +370,35 @@ function surfaceBelow(it) {
 const sits = it => it.sit ?? !(+it.z > 0);
 
 let drag = null;
+// where a click lands on the room: a main wall, an alcove's back wall or the floor (spec coordinates)
+function surfaceAt(e) {
+  setNdc(e);
+  const targets = built?.root ? built.root.children.filter(o => o.name !== 'decals') : [];
+  for (const h of ray.intersectObjects(targets, true)) {
+    if (/^ceiling/.test(h.object.name)) continue;
+    const p = h.point, x = r2(p.x), y = r2(-p.z), z = r2(p.y);
+    let o = h.object; while (o && o.userData.wall === undefined && o.userData.featureId === undefined && !o.userData.isFloor) o = o.parent;
+    if (!o) continue;
+    if (o.userData.isFloor || z < 0.02) return { surface: 'floor', x, y };
+    const F = roomFrame(spec);
+    if (o.userData.wall) return { surface: o.userData.wall, u: F.walls[o.userData.wall].axis === 'x' ? x : y, z };
+    const ft = spec.features.find(f => f.id === o.userData.featureId);
+    if (ft && (ft.type === 'alcove' || ft.type === 'kitchenette')) return { surface: 'alcove:' + ft.id, u: F.walls[ft.wall].axis === 'x' ? x : y, z };
+    if (ft && F.walls[ft.wall]) return { surface: ft.wall, u: F.walls[ft.wall].axis === 'x' ? x : y, z };
+  }
+  return null;
+}
 canvas.addEventListener('pointerdown', e => {
+  if (placingDecal !== null && e.button === 0) {
+    const hit = surfaceAt(e), dc = spec.decals[placingDecal];
+    if (hit && dc) {
+      Object.assign(dc, hit);
+      if (hit.surface === 'floor') { delete dc.u; delete dc.z; } else { delete dc.x; delete dc.y; }
+      sel = { kind: 'decal', id: placingDecal }; placingDecal = null; canvas.style.cursor = '';
+      changed({ structural: true }); toast('Decal placed. Fine-tune it with the sliders.');
+    } else toast('Click on a wall, an alcove or the floor.', true);
+    return;
+  }
   if (camMode === 'eye') { drag = { kind: 'look', x: e.clientX, y: e.clientY, yaw: eye.yaw, pitch: eye.pitch }; canvas.setPointerCapture(e.pointerId); return; }
   if (e.button === 2 || e.button === 1) {
     if (camMode === 'plan') { drag = { kind: 'pan', x: e.clientX, y: e.clientY, px: planPan.x, py: planPan.y }; canvas.setPointerCapture(e.pointerId); }
@@ -416,6 +461,7 @@ window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveRoom(); return; }
   if (!sel) return;
+  if (sel.kind === 'decal' && (e.key === 'Delete' || e.key === 'Backspace')) { spec.decals.splice(sel.id, 1); sel = null; changed({ structural: true }); return; }
   if (sel.kind === 'item') {
     const it = spec.items.find(i => i.id === sel.id); if (!it) return;
     if (e.key === 'r' || e.key === 'R') { it.rot = ((+it.rot || 0) + (e.shiftKey ? -15 : 15) + 360) % 360; if (it.rot > 180) it.rot -= 360; changed({ rebuild: false, items: true }); showInspector(); }
@@ -435,7 +481,8 @@ window.addEventListener('keydown', e => {
 function select(s, switchTab = true) {
   sel = s;
   if (s && switchTab) {
-    const t = { item: 'models', feature: 'walls', view: 'views' }[s.kind];
+    const t = { item: 'models', feature: 'walls', view: 'views', decal: 'models' }[s.kind];
+    if (s.kind === 'decal') modelsSub = 'decals';
     if (t && tab !== t) { tab = t; markTabs(); }
   }
   renderTab(); showInspector(); drawOverlay();
@@ -906,8 +953,97 @@ function tabModels(body) {
   })));
   body.append(el('div', { class: 'subtabs', style: 'margin-top:16px' },
     el('button', { class: modelsSub === 'library' ? 'on' : '', onclick: () => { modelsSub = 'library'; renderTab(); } }, `Library (${catalogue.length})`),
-    el('button', { class: modelsSub === 'find' ? 'on' : '', onclick: () => { modelsSub = 'find'; renderTab(); } }, 'Find more online')));
-  if (modelsSub === 'library') libraryPanel(body); else findPanel(body);
+    el('button', { class: modelsSub === 'find' ? 'on' : '', onclick: () => { modelsSub = 'find'; renderTab(); } }, 'Find more online'),
+    el('button', { class: modelsSub === 'decals' ? 'on' : '', onclick: () => { modelsSub = 'decals'; renderTab(); } }, `Decals${spec.decals.length ? ` (${spec.decals.length})` : ''}`)));
+  if (modelsSub === 'library') libraryPanel(body); else if (modelsSub === 'decals') decalsPanel(body); else findPanel(body);
+}
+
+// ---------------------------------------------------------------- decals
+const DECAL_CATS = { drawing: 'Drawings', graffiti: 'Graffiti', poster: 'Posters', sign: 'Signs', damage: 'Damage', uploaded: 'Your images' };
+function decalSurfaces() {
+  const out = WALLNAMES.map(w => [w, `${w[0].toUpperCase()}${w.slice(1)} wall`]);
+  for (const f of spec.features) if (f.type === 'alcove' || f.type === 'kitchenette') out.push(['alcove:' + f.id, `Back of ${f.type} "${f.id}" (${f.wall})`]);
+  out.push(['floor', 'Floor']);
+  return out;
+}
+function addDecal(meta) {
+  const F = roomFrame(spec);
+  const dc = { decal: meta.id, surface: 'north', u: 0, z: Math.min(1.5, F.RH - 0.3), width: +meta.width || 0.5, rot: 0, opacity: 1 };
+  spec.decals.push(dc); sel = { kind: 'decal', id: spec.decals.length - 1 };
+  placingDecal = spec.decals.length - 1; canvas.style.cursor = 'crosshair';
+  changed({ structural: true }); toast('Now click where it goes: a wall, an alcove or the floor (or use the sliders).', false, 5000);
+}
+function decalEditor(i) {
+  const dc = spec.decals[i]; if (!dc) return null;
+  const meta = decalCat.find(d => d.id === dc.decal) || { name: dc.decal, aspect: 1 };
+  const F = roomFrame(spec); const P = decalPlacement(spec, dc);
+  const live = () => { rebuildRoom(); }, commit = () => changed({});
+  const sl = (label, key, min, max, step, fmt) => row(label, ...slider(+dc[key] || 0, min, max, step, v => { dc[key] = v; live(); }, v => { dc[key] = v; commit(); }, fmt));
+  let along = [F.walls.north.lo, F.walls.north.hi];
+  if (dc.surface !== 'floor') {
+    const wall = P?.wall || dc.surface, ft = String(dc.surface).startsWith('alcove:') ? spec.features.find(f => f.id === dc.surface.slice(7)) : null;
+    along = ft ? span(ft) : [F.walls[wall]?.lo ?? -3, F.walls[wall]?.hi ?? 3];
+  }
+  const card = el('div', { class: 'card sel' },
+    el('div', { class: 'head' }, el('b', {}, meta.name),
+      el('button', { title: 'Copy it', onclick: () => { spec.decals.push({ ...dc, u: (+dc.u || 0) + 0.3, x: dc.x !== undefined ? +dc.x + 0.3 : undefined }); sel = { kind: 'decal', id: spec.decals.length - 1 }; changed({ structural: true }); } }, 'Copy'),
+      el('button', { class: 'danger', title: 'Remove', onclick: () => { spec.decals.splice(i, 1); sel = null; changed({ structural: true }); } }, '✕')),
+    row('On', el('select', { class: 'grow', onchange: e => { const v = e.target.value; dc.surface = v;
+        if (v === 'floor') { dc.x = 0; dc.y = 0; delete dc.u; delete dc.z; } else { dc.u = 0; dc.z = dc.z ?? 1.4; delete dc.x; delete dc.y; } changed({ structural: true }); } },
+      decalSurfaces().map(([v, l]) => el('option', { value: v, selected: v === dc.surface }, l)))),
+    el('div', { class: 'row' }, el('label', {}),
+      el('button', { onclick: () => { placingDecal = i; canvas.style.cursor = 'crosshair'; toast('Click where it goes: a wall, an alcove or the floor.', false, 5000); } }, 'Place by clicking'),
+      el('span', { class: 'note' }, ' in 3D or Eye view')),
+    dc.surface === 'floor'
+      ? [sl('Across (W–E)', 'x', F.X0, F.X1, 0.01, x => `${(+x).toFixed(2)} m`), sl('Along (S–N)', 'y', F.Y0, F.Y1, 0.01, x => `${(+x).toFixed(2)} m`)]
+      : [sl('Along the wall', 'u', along[0], along[1], 0.01, x => `${(+x).toFixed(2)} m`), sl('Height (centre)', 'z', 0.05, F.RH - 0.05, 0.01, x => `${(+x).toFixed(2)} m`)],
+    sl('Width', 'width', 0.05, 4, 0.01, x => `${(+x).toFixed(2)} m × ${(+x * (+meta.aspect || 1)).toFixed(2)} m`),
+    sl('Turn', 'rot', -180, 180, 1, x => `${Math.round(x)}°`),
+    row('Opacity', ...slider(+(dc.opacity ?? 1), 0.1, 1, 0.05, v => { dc.opacity = v; live(); }, v => { dc.opacity = v; commit(); }, x => `${Math.round(x * 100)}%`)),
+  );
+  return card;
+}
+function decalsPanel(body) {
+  body.append(el('p', { class: 'note' }, 'Drawings, graffiti, posters, signs and damage, stuck on a wall, an alcove or the floor. Pick one, then click where it goes. Your own images (PNG with a transparent background, or JPG) can be added at the bottom.'));
+  if (spec.decals.length) {
+    body.append(el('h4', {}, 'In this room'), el('ul', { class: 'list' }, spec.decals.map((dc, i) => {
+      const m = decalCat.find(d => d.id === dc.decal);
+      return el('li', { class: sel?.kind === 'decal' && sel.id === i ? 'sel' : '', onclick: () => select({ kind: 'decal', id: i }, false) },
+        el('span', { class: 'n' }, m?.name || dc.decal), el('span', { class: 'note' }, decalSurfaces().find(s => s[0] === dc.surface)?.[1] || dc.surface),
+        el('button', { class: 'danger', title: 'Remove', onclick: e => { e.stopPropagation(); spec.decals.splice(i, 1); sel = null; changed({ structural: true }); } }, '✕'));
+    })));
+    if (sel?.kind === 'decal') body.append(decalEditor(sel.id));
+  }
+  const groups = {};
+  for (const d of decalCat) (groups[d.category] ||= []).push(d);
+  for (const [cat, list] of Object.entries(groups)) {
+    body.append(el('h4', {}, DECAL_CATS[cat] || cat), el('div', { class: 'grid' }, list.map(d => el('div', { class: 'tile', title: `${d.name} · ${d.licence || ''} · click to add`, onclick: () => addDecal(d) },
+      el('img', { src: `/catalogue/decals/${encodeURIComponent(d.file)}`, alt: '', loading: 'lazy', style: 'object-fit:contain;background:#8c8a84' }),
+      el('div', { class: 'n' }, d.name),
+      d.source !== 'Room Builder' ? el('button', { class: 'danger', style: 'padding:1px 6px;font-size:11px', title: 'Remove from the decal library',
+        onclick: async e => { e.stopPropagation(); if (!confirm(`Remove "${d.name}" from the decal library?`)) return; await api(`/api/decals/${d.id}/remove`, {}); await loadDecals(); renderTab(); } }, 'Remove') : null))));
+  }
+  // upload your own
+  const up = { name: '', width: 0.5, licence: '' };
+  const file = el('input', { type: 'file', accept: 'image/png,image/jpeg' });
+  body.append(el('h4', {}, 'Add your own image'),
+    row('Image', file),
+    row('Name', el('input', { type: 'text', class: 'grow', placeholder: 'e.g. Ward poster', oninput: e => (up.name = e.target.value) })),
+    row('Real width', numIn(0.5, 0.05, v => (up.width = v), { min: 0.05, max: 5 }), el('span', { class: 'note' }, 'm')),
+    row('Licence', el('input', { type: 'text', class: 'grow', placeholder: 'e.g. own drawing, CC0, CC-BY (author)', oninput: e => (up.licence = e.target.value) })),
+    el('div', { class: 'row' }, el('label', {}), el('button', { class: 'primary', onclick: async () => {
+      const f = file.files?.[0]; if (!f) return toast('Choose an image first.', true);
+      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+      try {
+        const entry = await api('/api/decals', { name: up.name || f.name.replace(/\.[^.]+$/, ''), width: up.width, licence: up.licence, data });
+        await loadDecals(); addDecal(entry);
+      } catch (err) { toast(String(err.message || err), true, 6000); }
+    } }, 'Add to the decal library')),
+    el('p', { class: 'note' }, 'Only use images you have the right to use: your own, or ones with a licence that allows it. The licence you type is written into each render\'s credits.'));
+}
+async function loadDecals() {
+  try { decalCat = (await api('/api/decals')).decals || []; } catch { decalCat = []; }
+  setDecalCatalogue(decalCat);
 }
 
 function libraryPanel(body) {
@@ -1236,6 +1372,7 @@ $('#btnSettings').addEventListener('click', openSettings);
   try { presets = (await api('/api/presets')).rooms; } catch { presets = []; }
   try { outsideCfg = await api('/api/outside'); } catch { /* no outside presets */ }
   try { finCfg = await api('/api/finishes'); } catch { /* no finishes file: the renderer falls back to the room type */ }
+  await loadDecals();
   try { catalogue = await api('/api/catalogue'); } catch { catalogue = []; }
   resize();
   const draft = store.get('rb_draft', null);

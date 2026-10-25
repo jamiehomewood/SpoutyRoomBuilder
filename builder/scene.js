@@ -176,6 +176,50 @@ function finishMat(f, cond, fallback, floor = false) {
   const col = new THREE.Color(c).multiplyScalar(COND_SHADE[cond] ?? 1);
   return new THREE.MeshStandardMaterial({ color: col, map: tex, roughness: 0.85, side: THREE.DoubleSide });
 }
+// ---- decals: drawings, graffiti, posters, stains on a wall, an alcove's back wall or the floor
+let DECALS = [];
+export function setDecalCatalogue(list) { DECALS = list || []; }
+const decalTex = new Map();
+function decalTexture(meta) {
+  let t = decalTex.get(meta.file);
+  if (!t) { t = texLoader.load(`/catalogue/decals/${encodeURIComponent(meta.file)}`, () => texChanged?.()); t.colorSpace = THREE.SRGBColorSpace; decalTex.set(meta.file, t); }
+  return t;
+}
+// where a decal sits: centre, the image's right and up directions (spec space), size
+export function decalPlacement(spec, dc) {
+  const meta = DECALS.find(d => d.id === dc.decal); if (!meta) return null;
+  const F = roomFrame(spec), w = +(dc.width ?? meta.width ?? 0.5), h = w * (+meta.aspect || 1);
+  if (dc.surface === 'floor') return { meta, w, h, c: [+dc.x || 0, +dc.y || 0, 0.004], right: [1, 0, 0], up: [0, 1, 0] };
+  let wall = dc.surface, depth = 0;
+  if (String(dc.surface).startsWith('alcove:')) {
+    const ft = (spec.features || []).find(f => f.id === dc.surface.slice(7)); if (!ft) return null;
+    wall = ft.wall; depth = +(ft.depth ?? 0.6);
+  }
+  if (!F.walls[wall]) return null;
+  const z = +(dc.z ?? 1.4);
+  const lf = spec.wall_finishes?.[wall] && 'lower' in spec.wall_finishes[wall] ? spec.wall_finishes[wall].lower : spec.finishes?.lower;
+  const panel = lf?.type === 'panelling' && z - h / 2 < Math.min(+(lf.height ?? 1.15), F.RH - 0.3) + 0.07;
+  const off = panel ? 0.045 : 0.009;
+  const c = F.w2(wall, +dc.u || 0, depth - off, z), o = F.w2(wall, 0, 0, 0), n1 = F.w2(wall, 0, 1, 0);
+  const n = [n1[0] - o[0], n1[1] - o[1]];
+  return { meta, w, h, c, right: [n[1], -n[0], 0], up: [0, 0, 1], wall, depth };
+}
+function decalMesh(spec, dc, i) {
+  const P = decalPlacement(spec, dc); if (!P) return null;
+  const a = (+dc.rot || 0) * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+  const r = P.right.map((v, k) => v * cs + P.up[k] * sn), u = P.up.map((v, k) => v * cs - P.right[k] * sn);
+  const pt = (sx, sy) => b2t(...P.c.map((v, k) => v + r[k] * sx * P.w / 2 + u[k] * sy * P.h / 2));
+  const vs = [pt(-1, -1), pt(1, -1), pt(1, 1), pt(-1, 1)];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(vs.flatMap(v => [v.x, v.y, v.z]), 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals();
+  const m = new THREE.MeshStandardMaterial({ map: decalTexture(P.meta), transparent: true, opacity: +(dc.opacity ?? 1), depthWrite: false,
+    side: THREE.DoubleSide, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 });
+  const mesh = new THREE.Mesh(g, m); mesh.name = 'decal_' + i; mesh.userData.decalIndex = i; mesh.userData.uvDone = true; mesh.renderOrder = 2;
+  return mesh;
+}
+
 // give room meshes texture coordinates in metres: floors/ceilings use the plan, walls run along the wall and up
 const _v = new THREE.Vector3(), _n = new THREE.Vector3();
 function worldUVs(root) {
@@ -513,7 +557,10 @@ export function buildRoom(spec, opts = {}) {
   }
   root.add(ceilings);
   worldUVs(root);
-  return { root, ceilings, pick, frame: F, zones };
+  const decals = new THREE.Group(); decals.name = 'decals';
+  (spec.decals || []).forEach((dc, i) => { const m = decalMesh(spec, dc, i); if (m) decals.add(m); });
+  root.add(decals);
+  return { root, ceilings, pick, frame: F, zones, decals };
 }
 
 export function corridorExtent(spec, ft) {

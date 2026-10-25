@@ -1428,6 +1428,66 @@ if OUTDOOR:                                         # an invisible ground that o
     try: gnd.is_shadow_catcher = True
     except Exception: log("no shadow catcher in this Blender")
 
+# ============================================================== decals
+# Drawings, graffiti, posters, stains: an image card just in front of a wall, an alcove's back wall or the floor.
+# spec.decals: [{decal, surface: north|east|south|west|floor|alcove:<id>, u, z (walls) or x, y (floor), width, rot, opacity}]
+DECAL_DIR = os.path.join(ROOT, "catalogue", "decals")
+DECAL_CAT = {d["id"]: d for d in _load(os.path.join(DECAL_DIR, "decals.json"), {"decals": []}).get("decals", [])}
+USED_DECALS = []
+
+def decal_material(meta, opacity):
+    key = f"Decal_{meta['id']}_{round(opacity, 2)}"
+    if key in bpy.data.materials: return bpy.data.materials[key]
+    m, nt, b = principled(key)
+    t = nt.nodes.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(os.path.join(DECAL_DIR, meta["file"]), check_existing=True)
+    t.extension = "CLIP"
+    nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
+    a = _math(nt, "MULTIPLY", t.outputs["Alpha"], float(opacity)); nt.links.new(a, b.inputs["Alpha"])
+    b.inputs["Roughness"].default_value = 0.45 if meta.get("category") in ("poster", "sign") else 0.8
+    for attr, val in (("blend_method", "HASHED"), ("surface_render_method", "DITHERED")):
+        try: setattr(m, attr, val)
+        except Exception: pass
+    return m
+
+def decal_quad(name, centre, right, up, w, h, rot, mat):
+    """A w x h card centred on 'centre', its image right along 'right' and up along 'up', turned by rot degrees."""
+    c, sn = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+    r = right * c + up * sn; u = up * c - right * sn
+    corners = [centre - r * (w / 2) - u * (h / 2), centre + r * (w / 2) - u * (h / 2), centre + r * (w / 2) + u * (h / 2), centre - r * (w / 2) + u * (h / 2)]
+    me = bpy.data.meshes.new(name); me.from_pydata([tuple(v) for v in corners], [], [(0, 1, 2, 3)])
+    uv = me.uv_layers.new()
+    for li, (x, y) in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))): uv.data[li].uv = (x, y)
+    me.materials.append(mat)
+    o = bpy.data.objects.new(name, me); coll("Decals").objects.link(o)
+    o.visible_shadow = False
+    return o
+
+for i, dc in enumerate(SPEC.get("decals", []) or []):
+    try:
+        meta = DECAL_CAT.get(dc.get("decal"))
+        if not meta or not os.path.exists(os.path.join(DECAL_DIR, meta["file"])): log("decal missing", dc.get("decal")); continue
+        w = float(dc.get("width", meta.get("width", 0.5))); h = w * float(meta.get("aspect", 1.0))
+        mat = decal_material(meta, float(dc.get("opacity", 1.0))); surf = dc.get("surface", "north"); name = f"Decal_{i}_{meta['id']}"
+        if surf == "floor":
+            decal_quad(name, Vector((float(dc.get("x", 0)), float(dc.get("y", 0)), 0.003)), Vector((1, 0, 0)), Vector((0, 1, 0)), w, h, float(dc.get("rot", 0)), mat)
+        else:
+            wall, depth = surf, 0.0
+            if surf.startswith("alcove:"):
+                ft = next((f for f in FEATURES if f.get("id") == surf[7:]), None)
+                if not ft: log("decal: no alcove", surf); continue
+                wall, depth = ft["wall"], fdepth(ft)
+            if wall not in WALLS: continue
+            z = float(dc.get("z", 1.4)); lf = (WALL_SET.get(wall) or (None, None, None))[2]
+            panel = lf and lf.get("type") == "panelling" and z - h / 2 < lower_height(lf) + 0.07
+            off = 0.045 if panel else 0.009                                 # in front of panelling, rails and tiles
+            centre = w2world(wall, float(dc.get("u", 0)), depth - off, z)
+            n = (w2world(wall, 0, 1, 0) - w2world(wall, 0, 0, 0)).normalized()  # into the wall
+            right = n.cross(Vector((0, 0, 1)))                                  # what the viewer sees as "right"
+            decal_quad(name, centre, right, Vector((0, 0, 1)), w, h, float(dc.get("rot", 0)), mat)
+        USED_DECALS.append({"id": meta["id"], "name": meta.get("name", meta["id"]), "source": meta.get("source", ""), "licence": meta.get("licence", "")})
+    except Exception as e:
+        import traceback; traceback.print_exc(); log("decal failed", dc.get("decal"), e)
+
 # ============================================================== items
 for it in SPEC.get("items", []):
     try:
@@ -1556,6 +1616,8 @@ try:
 except Exception as e:
     log("could not save room.blend", e)
 
+with open(os.path.join(OUT_DIR, "used_decals.json"), "w", encoding="utf-8") as fh:
+    json.dump({d["id"]: d for d in USED_DECALS}, fh)
 with open(os.path.join(OUT_DIR, "used_models.json"), "w", encoding="utf-8") as fh:
     json.dump(sorted(USED), fh)
 

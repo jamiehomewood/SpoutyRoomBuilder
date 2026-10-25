@@ -17,7 +17,7 @@
 // Give this page to Spouty (4096 x 2048) or an Igloo web layer set to 360 / equirectangular.
 // ?view=<name> uses another view point; ?msg=0 hides the status line.
 import * as THREE from 'three';
-import { buildRoom, makeItem, lightRoom, roomFrame, b2t, EquirectRenderer, outsideSphere, onPreviewTexture } from './scene.js';
+import { buildRoom, makeItem, lightRoom, roomFrame, b2t, EquirectRenderer, outsideSphere, onPreviewTexture, setDecalCatalogue } from './scene.js';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('c'), msg = document.getElementById('msg');
@@ -77,7 +77,11 @@ function frame(t) {
   const F = roomFrame(spec);
   eq.render(scene, b2t(+v.x, +v.y, +(v.z ?? F.eye)), +v.yaw || 0);
 }
-(async () => { try { cat = await (await fetch('/api/catalogue')).json(); } catch { } poll(); requestAnimationFrame(frame); })();
+(async () => {
+  try { cat = await (await fetch('/api/catalogue')).json(); } catch { }
+  try { setDecalCatalogue((await (await fetch('/api/decals')).json()).decals); } catch { }
+  poll(); requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>

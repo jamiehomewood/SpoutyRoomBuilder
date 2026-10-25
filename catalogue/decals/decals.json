@@ -1,0 +1,104 @@
+{
+ "decals": [
+  {
+   "id": "child_drawing_house",
+   "name": "Child's drawing (taped up)",
+   "file": "child_drawing_house.png",
+   "width": 0.31,
+   "aspect": 0.7157,
+   "category": "drawing",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "crayon_scribbles",
+   "name": "Crayon scribbles on the wall",
+   "file": "crayon_scribbles.png",
+   "width": 0.7,
+   "aspect": 0.6429,
+   "category": "drawing",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "graffiti_tag",
+   "name": "Graffiti tag (black spray)",
+   "file": "graffiti_tag.png",
+   "width": 1.2,
+   "aspect": 0.4167,
+   "category": "graffiti",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "graffiti_piece",
+   "name": "Graffiti piece (colour bubble letters)",
+   "file": "graffiti_piece.png",
+   "width": 2.2,
+   "aspect": 0.4094,
+   "category": "graffiti",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "graffiti_scrawl",
+   "name": "Scrawl (red spray)",
+   "file": "graffiti_scrawl.png",
+   "width": 0.9,
+   "aspect": 0.4444,
+   "category": "graffiti",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "poster_handwash",
+   "name": "Poster: please wash your hands",
+   "file": "poster_handwash.png",
+   "width": 0.297,
+   "aspect": 1.4141,
+   "category": "poster",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "sign_no_smoking",
+   "name": "No smoking sign",
+   "file": "sign_no_smoking.png",
+   "width": 0.2,
+   "aspect": 1.0,
+   "category": "sign",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "mould_patch",
+   "name": "Black mould patch",
+   "file": "mould_patch.png",
+   "width": 0.8,
+   "aspect": 0.75,
+   "category": "damage",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "damp_stain",
+   "name": "Damp stain with tide marks",
+   "file": "damp_stain.png",
+   "width": 1.0,
+   "aspect": 0.7,
+   "category": "damage",
+   "source": "Room Builder",
+   "licence": "Own work"
+  },
+  {
+   "id": "wall_crack",
+   "name": "Plaster crack",
+   "file": "wall_crack.png",
+   "width": 0.6,
+   "aspect": 1.6667,
+   "category": "damage",
+   "source": "Room Builder",
+   "licence": "Own work"
+  }
+ ]
+}

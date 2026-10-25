@@ -17,3 +17,7 @@ catalogue/models/*/textures/
 __pycache__/
 *.pyc
 *.blend1
+
+# decals people upload (kept on the PC)
+catalogue/decals/up_*
+catalogue/decals/_removed/
