@@ -176,6 +176,12 @@ export function buildRoom(spec, opts = {}) {
     for (const [a, b] of gaps) { if (a > cur) runs.push([cur, a]); cur = Math.max(cur, b); }
     if (cur < f.hi) runs.push([cur, f.hi]);
     for (const [a, b] of runs) if (b - a > 0.02) wb(wall, a, b, -0.018, 0, 0, 0.12, M.trim);
+    // coving along the top, broken only where a full-height alcove or kitchenette opens the wall
+    const tops = feats.filter(x => x.wall === wall && fullRecess(x)).map(span).sort((a, b) => a[0] - b[0]);
+    let ct = f.lo; const cruns = [];
+    for (const [a, b] of tops) { if (a > ct) cruns.push([ct, a]); ct = Math.max(ct, b); }
+    if (ct < f.hi) cruns.push([ct, f.hi]);
+    for (const [a, b] of cruns) if (b - a > 0.02) wb(wall, a, b, -0.05, 0, RH - 0.05, RH, M.trim);
   }
 
   const recess = (ft, wall, depth, h, floorMat) => {
@@ -188,6 +194,16 @@ export function buildRoom(spec, opts = {}) {
     const zone = (p0, p1, name) => { const a = w2(wall, p0[0], p0[1]), b = w2(wall, p1[0], p1[1]);
       zones.push({ name, x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: floorMat || M.floor, h, fid: ft.id }); };
     zone([u0, T / 2], [u1, depth], ft.id);
+    // skirting and coving carry on round the inside (wrapping the outside corners of the opening)
+    const full = h >= RH - 0.01, top = full ? RH : h;
+    const trimRound = (t, z0, z1, wrap) => {
+      wb(wall, u0 - dlo, u1 + dhi, depth - t, depth, z0, z1, M.trim);
+      const d0 = wrap ? -t : 0;
+      if (!mlo) wb(wall, u0, u0 + t, d0, depth, z0, z1, M.trim);
+      if (!mhi) wb(wall, u1 - t, u1, d0, depth, z0, z1, M.trim);
+    };
+    trimRound(0.018, 0, 0.12, true);
+    trimRound(0.05, top - 0.05, top, full);
     if (mlo && wall < mlo.wall) zone([u0 - dlo, 0], [u0, depth], ft.id + '_corner_lo');
     if (mhi && wall < mhi.wall) zone([u1, 0], [u1 + dhi, depth], ft.id + '_corner_hi');
     return [u0, u1];

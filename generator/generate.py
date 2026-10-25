@@ -577,10 +577,30 @@ def recess(ft, wall, depth, h, name, floor_m=None):
     for m_, a, b, tag in ((mlo, u0 - dlo, u0, "lo"), (mhi, u1, u1 + dhi, "hi")):   # the opened-up corner square
         if m_ and wall < m_["wall"]:
             cmn, cmx = wbox_world(wall, a, b, 0, depth, 0, 0); zones.append((f"{name}_corner_{tag}", cmn, cmx, floor_m or MAT["floor"], h))
-    # skirting round the inside
-    wbox(f"{name}_skirt_back", wall, u0 - dlo, u1 + dhi, depth - 0.018, depth, 0, 0.12, MAT["trim"])
-    if not mlo: wbox(f"{name}_skirt_a", wall, u0, u0 + 0.018, 0, depth, 0, 0.12, MAT["trim"])
-    if not mhi: wbox(f"{name}_skirt_b", wall, u1 - 0.018, u1, 0, depth, 0, 0.12, MAT["trim"])
+    # the alcove is part of the room: skirting, coving (and court panelling) carry on round the inside.
+    # wrap=True starts the side pieces in front of the wall line so they wrap the outside corner of the opening.
+    full = h >= RH - 0.01; top = RH if full else h
+    def trim_round(tag, t, z0, z1, m, wrap=True):
+        wbox(f"{name}_{tag}_back", wall, u0 - dlo, u1 + dhi, depth - t, depth, z0, z1, m)
+        d0 = -t if wrap else 0.0
+        if not mlo: wbox(f"{name}_{tag}_a", wall, u0, u0 + t, d0, depth, z0, z1, m)
+        if not mhi: wbox(f"{name}_{tag}_b", wall, u1 - t, u1, d0, depth, z0, z1, m)
+    trim_round("skirt", 0.018, 0, 0.12, MAT["trim"])
+    trim_round("cornice", 0.05, top - 0.05, top, MAT["trim"], wrap=full)
+    if COURT:
+        trim_round("wainscot", 0.02, 0.12, 1.1, MAT["panel"])
+        trim_round("wainscot_rail", 0.04, 1.1, 1.16, MAT["panel"])
+        a, b = u0 - dlo, u1 + dhi                                # stiles on the back wall...
+        n = max(1, round((b - a) / 0.6))
+        for k in range(n + 1):
+            u = a + (b - a) * k / n
+            wbox(f"{name}_stile_back_{k}", wall, max(a, u - 0.025), min(b, u + 0.025), depth - 0.03, depth, 0.12, 1.1, MAT["panel"])
+        n = max(1, round(depth / 0.6))                          # ...and along each side
+        for side, (ua, ub) in (("a", (u0, u0 + 0.03)), ("b", (u1 - 0.03, u1))):
+            if (side == "a" and mlo) or (side == "b" and mhi): continue
+            for k in range(n + 1):
+                d = depth * k / n
+                wbox(f"{name}_stile_{side}_{k}", wall, ua, ub, max(-0.02, d - 0.025), min(depth, d + 0.025), 0.12, 1.1, MAT["panel"])
     if depth > 1.2:                                 # deep bays need their own light
         cu = (u0 + u1) / 2
         if HOSPITAL or COURT:
