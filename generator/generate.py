@@ -397,12 +397,24 @@ def tiles_mat(name, f, wall=True):
     c1 = lin(f.get("colour", "#efefeb")); grout = lin(f.get("grout", "#bdbdb8" if sum(c1) > 1.2 else "#4a4a48"))
     m = brick_tiles(name, c1, shade(c1, 0.95), grout, size, row=row, offset=off, rough=0.15 if wall else 0.3, wall=wall)
     b = _bsdf(m); nt = m.node_tree
-    if f.get("colour2") and not wall:                     # two-colour floor tiles: a checkerboard
-        ck = _n(nt, "ShaderNodeTexChecker", Scale=1.0)
-        ck.inputs["Color1"].default_value = (*c1, 1); ck.inputs["Color2"].default_value = (*lin(f["colour2"]), 1)
-        nt.links.new(_floor_uv(nt, size * 2), ck.inputs["Vector"])
+    if not wall:
+        checker = bool(f.get("colour2")) and f.get("tile_size") != "metro"          # two colours only on square tiles
         br = next(n for n in nt.nodes if n.type == "TEX_BRICK")
-        nt.links.new(ck.outputs["Color"], br.inputs["Color1"]); nt.links.new(ck.outputs["Color"], br.inputs["Color2"])
+        vec = nt.nodes.new("ShaderNodeTexCoord").outputs["Object"]
+        if f.get("layout", "diagonal" if checker else "straight") == "diagonal":     # laid on the diagonal (45 degrees)
+            sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(vec, sep.inputs[0])
+            k = 1 / math.sqrt(2)
+            u = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", sep.outputs["X"], sep.outputs["Y"], clamp=False), k, clamp=False)
+            v = _math(nt, "MULTIPLY", _math(nt, "ADD", sep.outputs["X"], sep.outputs["Y"], clamp=False), k, clamp=False)
+            cmb = nt.nodes.new("ShaderNodeCombineXYZ"); nt.links.new(u, cmb.inputs["X"]); nt.links.new(v, cmb.inputs["Y"])
+            vec = cmb.outputs[0]
+        nt.links.new(vec, br.inputs["Vector"])
+        if checker:                                      # a checkerboard lined up with the tile grid
+            ck = _n(nt, "ShaderNodeTexChecker", Scale=1.0)
+            ck.inputs["Color1"].default_value = (*c1, 1); ck.inputs["Color2"].default_value = (*lin(f["colour2"]), 1)
+            sc = nt.nodes.new("ShaderNodeVectorMath"); sc.operation = "SCALE"; sc.inputs["Scale"].default_value = 1 / size        # Cycles' checker: one square per unit at scale 1
+            nt.links.new(vec, sc.inputs[0]); nt.links.new(sc.outputs[0], ck.inputs["Vector"])
+            nt.links.new(ck.outputs["Color"], br.inputs["Color1"]); nt.links.new(ck.outputs["Color"], br.inputs["Color2"])
     set_input(b, ("Coat Weight", "Clearcoat"), 0.35 if wall else 0.15)
     return m
 
@@ -477,7 +489,7 @@ def floor_finish_mat(name, f):
         m, nt, b = principled(name); pat = f.get("lino_pattern", "plain")
         if pat == "check":
             ck = _n(nt, "ShaderNodeTexChecker", Scale=1.0); ck.inputs["Color1"].default_value = (*c, 1); ck.inputs["Color2"].default_value = (*c2, 1)
-            nt.links.new(_floor_uv(nt, 0.6), ck.inputs["Vector"]); col = ck.outputs["Color"]
+            nt.links.new(_floor_uv(nt, 0.3), ck.inputs["Vector"]); col = ck.outputs["Color"]   # 0.3 m squares
         elif pat == "marble":
             nz = _n(nt, "ShaderNodeTexNoise", Scale=3.0, Detail=10.0, Roughness=0.6, Distortion=2.5); nt.links.new(_floor_uv(nt, 1.0), nz.inputs["Vector"])
             veins = _maprange(nt, nz.outputs["Fac"], 0.47, 0.53)            # thin wandering veins in a mottled ground

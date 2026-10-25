@@ -17,7 +17,7 @@
 // Give this page to Spouty (4096 x 2048) or an Igloo web layer set to 360 / equirectangular.
 // ?view=<name> uses another view point; ?msg=0 hides the status line.
 import * as THREE from 'three';
-import { buildRoom, makeItem, lightRoom, roomFrame, b2t, EquirectRenderer, outsideSphere } from './scene.js';
+import { buildRoom, makeItem, lightRoom, roomFrame, b2t, EquirectRenderer, outsideSphere, onPreviewTexture } from './scene.js';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('c'), msg = document.getElementById('msg');
@@ -27,6 +27,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.A
 const eq = new EquirectRenderer(renderer, 1024);
 const scene = new THREE.Scene();
 let spec = null, rev = -1, cat = [], dirty = true, outsideCfg = null;
+onPreviewTexture(() => { dirty = true; });   // wallpaper patterns load after the room is built
 const holder = new THREE.Group(); scene.add(holder);
 
 function resize() { renderer.setSize(innerWidth, innerHeight, false); dirty = true; }

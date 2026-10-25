@@ -468,7 +468,7 @@ class Handler(SimpleHTTPRequestHandler):
         p = super().translate_path(path)
         # only serve the builder, vendor files, the catalogue and the library
         rel = os.path.relpath(p, ROOT).replace("\\", "/")
-        if rel.split("/")[0] not in ("builder", "vendor", "catalogue", "library", "examples", "presets"):
+        if rel.split("/")[0] not in ("builder", "vendor", "catalogue", "library", "examples", "presets", "textures"):
             return os.path.join(ROOT, "builder", "__nope__")
         if rel.endswith("config.json"): return os.path.join(ROOT, "builder", "__nope__")
         return p

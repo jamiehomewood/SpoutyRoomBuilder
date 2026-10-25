@@ -604,7 +604,7 @@ function tabRoom(body) {
 // ---------------------------------------------------------------- finishes
 const SURFACE_LABEL = { walls: 'Walls', lower: 'Lower walls', floor: 'Floor', ceiling: 'Ceiling' };
 const OPTION_LABEL = { colour: 'Colour', colour2: 'Pattern colour', grout: 'Grout', sheen: 'Finish', pattern: 'Pattern', tile_size: 'Tile size',
-  wood: 'Wood', brick: 'Brick', carpet_pattern: 'Style', lino_pattern: 'Pattern', height: 'Height' };
+  wood: 'Wood', brick: 'Brick', carpet_pattern: 'Style', lino_pattern: 'Pattern', height: 'Height', layout: 'Laid' };
 const GROUTS = [['White', '#e6e6e2'], ['Light grey', '#bdbdb8'], ['Grey', '#8e8e8a'], ['Dark', '#3e3e3c']];
 function paletteFor(surface, type, opt) {
   const P = finCfg.palettes || {};
@@ -615,11 +615,18 @@ function paletteFor(surface, type, opt) {
   if (type === 'wallpaper') return P.wallpaper || [];
   return P.paint || [];
 }
-function swatches(list, value, onPick, allowNone = false) {
+// a colour picker fires "change" only when it closes, so apply its colour live while it is open too
+let liveTimer = null;
+const liveColour = () => { clearTimeout(liveTimer); liveTimer = setTimeout(() => changed({ structural: false }), 120); };
+function swatches(list, value, onPick, allowNone = false, onLive = null) {
   const wrap = el('div', { class: 'swatches' });
   if (allowNone) wrap.append(el('button', { class: 'sw none' + (!value ? ' on' : ''), title: 'None', onclick: () => onPick(null) }, '–'));
   for (const [name, hex] of list) wrap.append(el('button', { class: 'sw' + (String(value).toLowerCase() === hex.toLowerCase() ? ' on' : ''), title: name, style: `background:${hex}`, onclick: () => onPick(hex) }));
-  wrap.append(el('input', { type: 'color', title: 'Any colour', value: /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#888888', onchange: e => onPick(e.target.value) }));
+  const custom = value && !list.some(([, h]) => h.toLowerCase() === String(value).toLowerCase());
+  wrap.append(el('input', { type: 'color', class: custom ? 'on' : '', title: custom ? `Your colour ${value}` : 'Pick any colour',
+    value: /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#888888',
+    oninput: e => { if (onLive) { onLive(e.target.value); liveColour(); } },
+    onchange: e => onPick(e.target.value) }));
   return wrap;
 }
 const FIN_DEFAULTS = { sheen: 'matt', pattern: 'stripe', tile_size: 'sq15', wood: 'oak', brick: 'red', carpet_pattern: 'plain', lino_pattern: 'plain' };
@@ -655,15 +662,19 @@ function finishEditor(surface, f, onChange) {
       if (o === 'colour2' && f.type === 'wallpaper' && ['woodchip', 'vintage'].includes(f.pattern)) continue;
       if (o === 'colour2' && f.type === 'carpet' && !['heather', 'patterned'].includes(f.carpet_pattern)) continue;
       if (o === 'colour2' && f.type === 'lino' && f.lino_pattern === 'plain') continue;
+      if (o === 'colour2' && f.type === 'tiles' && f.tile_size === 'metro') continue;    // metro tiles are one colour
       const label = o === 'colour2' ? (f.type === 'tiles' ? 'Second colour (checks)' : f.type === 'carpet' && f.carpet_pattern === 'heather' ? 'Second colour' : 'Pattern colour')
         : o === 'colour' && f.type === 'wallpaper' ? 'Background' : OPTION_LABEL[o];
-      box.append(row(label, swatches(paletteFor(surface, f.type, o), f[o], hex => { if (hex) f[o] = hex; else delete f[o]; onChange(); }, o === 'colour2' && f.type === 'tiles')));
+      box.append(row(label, swatches(paletteFor(surface, f.type, o), f[o], hex => { if (hex) f[o] = hex; else delete f[o]; onChange(); }, o === 'colour2' && f.type === 'tiles',
+        hex => { f[o] = hex; })));
     } else if (o === 'height') {
       box.append(row('Height', numIn(f.height ?? 1.2, 0.05, v => { f.height = Math.max(0.3, Math.min(2.0, v)); onChange(); }, { min: 0.3, max: 2.0 }), el('span', { class: 'note' }, 'm')));
     } else {
       const opts = (finCfg.options?.[o] || []);
-      box.append(row(OPTION_LABEL[o] || o, el('select', { class: 'grow', onchange: e => { f[o] = e.target.value; onChange(); } },
-        opts.map(([v, l]) => el('option', { value: v, selected: v === f[o] }, l)))));
+      const cur = o === 'layout' ? (f.layout || (f.colour2 && f.tile_size !== 'metro' ? 'diagonal' : 'straight')) : f[o];
+      box.append(row(OPTION_LABEL[o] || o, el('select', { class: 'grow', onchange: e => {
+        f[o] = e.target.value; if (o === 'tile_size' && f.type === 'tiles' && e.target.value === 'metro') delete f.colour2; onChange(); } },
+        opts.map(([v, l]) => el('option', { value: v, selected: v === cur }, l)))));
     }
   }
   return box;
@@ -675,7 +686,7 @@ function trimEditor(t, onChange) {
       el('option', { value: 'paint', selected: !wood }, 'Painted'), el('option', { value: 'wood', selected: wood }, 'Wood'))),
     wood ? row('Wood', el('select', { class: 'grow', onchange: e => { t.wood = e.target.value; onChange(); } },
              (finCfg.options?.wood || []).filter(([v]) => v !== 'painted').map(([v, l]) => el('option', { value: v, selected: v === t.wood }, l))))
-         : row('Colour', swatches(finCfg.palettes?.paint || [], t.colour, hex => { t.colour = hex; onChange(); })),
+         : row('Colour', swatches(finCfg.palettes?.paint || [], t.colour, hex => { t.colour = hex; onChange(); }, false, hex => { t.colour = hex; })),
     !wood ? row('Finish', el('select', { class: 'grow', onchange: e => { t.sheen = e.target.value; onChange(); } },
              (finCfg.options?.sheen || []).map(([v, l]) => el('option', { value: v, selected: v === (t.sheen || 'gloss') }, l)))) : null);
 }
@@ -689,7 +700,7 @@ function kitchenEditor(K, onChange) {
   if (K.units.style === 'wood')
     box.append(row('Wood', el('select', { class: 'grow', onchange: e => { K.units.wood = e.target.value; onChange(); } },
       (finCfg.options?.wood || []).filter(([v]) => v !== 'painted').map(([v, l]) => el('option', { value: v, selected: v === K.units.wood }, l)))));
-  else box.append(row('Colour', swatches(finCfg.palettes?.kitchen || finCfg.palettes?.paint || [], K.units.colour, hex => { K.units.colour = hex; onChange(); })));
+  else box.append(row('Colour', swatches(finCfg.palettes?.kitchen || finCfg.palettes?.paint || [], K.units.colour, hex => { K.units.colour = hex; onChange(); }, false, hex => { K.units.colour = hex; })));
   box.append(row('Worktop', opt('worktop', K.worktop.type, v => { K.worktop = { type: v }; if (v === 'laminate') K.worktop.colour = '#cbbd9f'; })));
   if (K.worktop.type === 'laminate') box.append(row('Colour', swatches(finCfg.palettes?.kitchen || [], K.worktop.colour, hex => { K.worktop.colour = hex; onChange(); })));
   box.append(row('Splashback', opt('splashback', K.splashback.type, v => { K.splashback = v === 'tiles' ? { type: v, tile_size: 'metro', colour: '#efefeb' } : v === 'glass' ? { type: v, colour: '#c9cbc8' } : { type: v }; })));

@@ -427,6 +427,7 @@
         "name": "Tiles",
         "options": [
           "tile_size",
+          "layout",
           "colour",
           "colour2",
           "grout"
@@ -671,6 +672,16 @@
       [
         "black",
         "Black"
+      ]
+    ],
+    "layout": [
+      [
+        "straight",
+        "Straight"
+      ],
+      [
+        "diagonal",
+        "Diagonal (45\u00b0)"
       ]
     ]
   },

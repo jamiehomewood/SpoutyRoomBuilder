@@ -69,10 +69,130 @@ export function finishColour(f) {
     default: return f.colour ? hexNum(f.colour) : null;
   }
 }
-function finishMat(f, cond, fallback) {
-  const c = finishColour(f); if (c == null) return fallback;
+// ---- preview textures: a small canvas per finish (tiles with grout, checks, boards, blocks, wallpaper patterns),
+// laid on the room in metres by worldUVs(). The Blender render is still the real thing; this is so the choice is visible.
+const TILE_M = { metro: [0.2, 0.1], sq10: [0.1, 0.1], sq15: [0.15, 0.15], sq30: [0.3, 0.3], sq60: [0.6, 0.6] };
+const texCache = new Map();
+let texChanged = null;                                     // called when an async pattern finishes loading
+export function onPreviewTexture(fn) { texChanged = fn; }
+function canvasTex(w, h, draw, mx, my, rot = 0) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / mx, 1 / my); t.rotation = rot; t.anisotropy = 4;
+  t.userData.canvas = c;
+  return t;
+}
+const css = h => (typeof h === 'number' ? '#' + h.toString(16).padStart(6, '0') : h);
+function shadeHex(h, k) { const c = new THREE.Color(css(h)); c.multiplyScalar(k); return '#' + c.getHexString(); }
+function defaultGrout(c) { return new THREE.Color(css(c)).getHSL({}).l > 0.45 ? '#bdbdb8' : '#4a4a48'; }
+function tilesTex(f, floor) {
+  const metro = f.tile_size === 'metro';
+  const [tw, th] = TILE_M[f.tile_size] || (floor ? TILE_M.sq30 : TILE_M.sq15);
+  const c1 = f.colour || '#efefeb', c2 = (floor && f.colour2 && !metro) ? f.colour2 : null, g = f.grout || defaultGrout(c1);
+  const diag = floor && (f.layout || (c2 ? 'diagonal' : 'straight')) === 'diagonal';
+  return canvasTex(256, metro ? 128 : 256, (x, W, H) => {
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const gp = Math.max(1.5, W * 0.006 / (tw * 2));
+    if (metro) {
+      for (let r = 0; r < 2; r++) for (let k = -1; k < 3; k++) {
+        const ox = (k + (r % 2 ? 0.5 : 0)) * W / 2; x.fillStyle = k % 2 ? shadeHex(c1, 0.97) : c1;
+        x.fillRect(ox + gp / 2, r * H / 2 + gp / 2, W / 2 - gp, H / 2 - gp);
+      }
+    } else {
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+        x.fillStyle = c2 ? ((i + j) % 2 ? c2 : c1) : ((i + j) % 2 ? shadeHex(c1, 0.97) : c1);
+        x.fillRect(i * W / 2 + gp / 2, j * H / 2 + gp / 2, W / 2 - gp, H / 2 - gp);
+      }
+    }
+  }, tw * 2, th * 2, diag ? Math.PI / 4 : 0);
+}
+function bondTex(c1, c2, mortar, bw, bh, rows = 2) {           // blockwork / brick in stretcher bond
+  return canvasTex(256, 256, (x, W, H) => {
+    x.fillStyle = mortar; x.fillRect(0, 0, W, H);
+    const rh = H / rows, g = Math.max(1.5, W * 0.01 / bw);
+    for (let r = 0; r < rows; r++) for (let k = -1; k < 2; k++) {
+      x.fillStyle = (r + k) % 2 ? c2 : c1;
+      x.fillRect((k + (r % 2 ? 0.5 : 0)) * W + g / 2, r * rh + g / 2, W - g, rh - g);
+    }
+  }, bw, bh * rows);
+}
+function boardsTex(base) {                                       // wood boards, staggered
+  return canvasTex(256, 512, (x, W, H) => {
+    const n = 4, bw = W / n;
+    for (let i = 0; i < n; i++) {
+      const off = ((i * 37) % 10) / 10 * H;
+      for (let k = -1; k < 2; k++) {
+        x.fillStyle = shadeHex(base, 0.9 + ((i * 7 + k * 3) % 5) * 0.045);
+        x.fillRect(i * bw + 1, off + k * H + 1, bw - 2, H - 2);
+      }
+    }
+  }, 0.6, 1.2);
+}
+function maskTex(name, ground, ink, metres, mix = 1) {          // a pattern mask from textures/patterns, coloured
+  const t = canvasTex(256, 256, (x, W, H) => { x.fillStyle = ground; x.fillRect(0, 0, W, H); }, metres, metres);
+  const img = new Image();
+  img.onload = () => {
+    const c = t.userData.canvas, x = c.getContext('2d');
+    x.drawImage(img, 0, 0, c.width, c.height);
+    // mix in sRGB (canvas pixels are sRGB; THREE.Color stores linear)
+    const a = new THREE.Color(ground).getRGB({}, THREE.SRGBColorSpace), b = new THREE.Color(ink).getRGB({}, THREE.SRGBColorSpace);
+    const d = x.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const m = d.data[i] / 255 * mix;
+      d.data[i] = 255 * (a.r + (b.r - a.r) * m); d.data[i + 1] = 255 * (a.g + (b.g - a.g) * m); d.data[i + 2] = 255 * (a.b + (b.b - a.b) * m); d.data[i + 3] = 255;
+    }
+    x.putImageData(d, 0, 0); t.needsUpdate = true; texChanged?.();
+  };
+  img.src = `/textures/patterns/${name}.png`;
+  return t;
+}
+function finishTexture(f) {
+  if (!f || typeof document === 'undefined') return null;
+  const key = JSON.stringify(f); if (texCache.has(key)) return texCache.get(key);
+  let t = null;
+  switch (f.type) {
+    case 'tiles': t = tilesTex(f, !!f.__floor); break;
+    case 'blockwork': { const c = f.colour || '#e4e1d2'; t = bondTex(c, shadeHex(c, 0.975), shadeHex(c, 0.86), 0.44, 0.215); break; }
+    case 'brick': { const B = { red: ['#94503a', '#7e4330', '#b1aba3'], yellow: ['#b9a170', '#a48c5c', '#b1aca3'], painted: ['#e6e4dc', '#dedcd4', '#cfcdc6'] }[f.brick || 'red'];
+      t = bondTex(B[0], B[1], B[2], 0.225, 0.075); break; }
+    case 'wood': case 'laminate': if (f.wood !== 'painted') t = boardsTex(css(WOOD_HEX[f.wood] ?? WOOD_HEX.oak)); break;
+    case 'wallpaper': if (!['woodchip', 'vintage'].includes(f.pattern)) t = maskTex(f.pattern, f.colour || '#e9dfc3', f.colour2 || '#c9a85e', 0.53); break;
+    case 'carpet':
+      if (f.carpet_pattern === 'patterned') t = maskTex('floral', f.colour || '#5d2329', f.colour2 || '#a9853f', 0.45, 0.55);
+      else if (f.carpet_pattern === 'cord') t = maskTex('cord', f.colour || '#777777', shadeHex(f.colour || '#777777', 0.8), 0.25);
+      break;
+    case 'lino': if (f.lino_pattern === 'check') t = canvasTex(64, 64, (x, W, H) => {
+      x.fillStyle = f.colour || '#b9ab8e'; x.fillRect(0, 0, W, H); x.fillStyle = f.colour2 || '#7a604a'; x.fillRect(0, 0, W / 2, H / 2); x.fillRect(W / 2, H / 2, W / 2, H / 2); }, 0.6, 0.6);
+      break;
+    case 'ceiling_tiles': t = canvasTex(128, 128, (x, W, H) => { x.fillStyle = '#a9a9a6'; x.fillRect(0, 0, W, H); x.fillStyle = '#dcdcd8'; x.fillRect(2, 2, W - 4, H - 4); }, 0.6, 0.6); break;
+  }
+  texCache.set(key, t); return t;
+}
+function finishMat(f, cond, fallback, floor = false) {
+  if (f?.type === 'tiles' && floor) f = { ...f, __floor: true };
+  const tex = finishTexture(f);
+  const c = tex ? 0xffffff : finishColour(f); if (c == null) return fallback;
   const col = new THREE.Color(c).multiplyScalar(COND_SHADE[cond] ?? 1);
-  return new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, side: THREE.DoubleSide });
+  return new THREE.MeshStandardMaterial({ color: col, map: tex, roughness: 0.85, side: THREE.DoubleSide });
+}
+// give room meshes texture coordinates in metres: floors/ceilings use the plan, walls run along the wall and up
+const _v = new THREE.Vector3(), _n = new THREE.Vector3();
+function worldUVs(root) {
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!o.isMesh || !o.material?.map || o.userData.uvDone) return;
+    let g = o.geometry; if (g.index) { g = g.toNonIndexed(); o.geometry = g; }
+    g.computeVertexNormals();
+    const pos = g.attributes.position, nor = g.attributes.normal, uv = new Float32Array(pos.count * 2);
+    const nm = new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld); _n.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+      if (Math.abs(_n.y) > 0.7) { uv[i * 2] = _v.x; uv[i * 2 + 1] = -_v.z; }
+      else { uv[i * 2] = Math.abs(_n.x) > Math.abs(_n.z) ? -_v.z : _v.x; uv[i * 2 + 1] = _v.y; }
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); o.userData.uvDone = true;
+  });
 }
 
 // a run-down home (neglected / derelict condition): bare bulb, nets, dated kitchen, like the old "neglected" style
@@ -97,8 +217,9 @@ function mats(style, spec) {
   const fin = spec?.finishes, cond = spec?.condition || 'new';
   if (fin) {
     m.wall = finishMat(fin.walls, cond, m.wall);
-    m.floor = finishMat(fin.floor, cond, m.floor);
-    m.ceiling = fin.ceiling?.type === 'tiles' ? m.ceiling : finishMat(fin.ceiling, cond, m.ceiling);
+    m.floor = finishMat(fin.floor, cond, m.floor, true);
+    // ceiling plaster/artex are painted (not the bare pink plaster wall finish)
+    m.ceiling = finishMat(fin.ceiling?.type === 'tiles' ? { type: 'ceiling_tiles' } : { type: 'paint', colour: fin.ceiling?.colour || '#f0eee8' }, cond, m.ceiling);
     m.trim = fin.trim ? finishMat(fin.trim.wood ? { type: 'wood', wood: fin.trim.wood } : { type: 'paint', colour: fin.trim.colour }, cond, m.trim) : m.trim;
     const K = fin.kitchen;
     if (K) {                                           // kitchen units, worktop, splashback, floor, appliances
@@ -108,8 +229,8 @@ function mats(style, spec) {
       const wt = K.worktop?.type || 'quartz_white';
       m.ktop = finishMat(wt === 'oak' ? { type: 'wood', wood: 'oak' } : { type: 'paint', colour: wt === 'laminate' ? K.worktop.colour : WT[wt] }, cond, m.ktop);
       const sp = K.splashback || {};
-      m.splash = sp.type === 'same' ? null : finishMat(sp.type === 'glass' ? { type: 'paint', colour: sp.colour } : { type: 'tiles', colour: sp.colour }, cond, m.splash);
-      if (K.floor && K.floor.type !== 'same') m.kfloor = finishMat(K.floor, cond, m.kfloor); else m.kfloor = null;
+      m.splash = sp.type === 'same' ? null : finishMat(sp.type === 'glass' ? { type: 'paint', colour: sp.colour } : { type: 'tiles', tile_size: sp.tile_size || 'metro', colour: sp.colour, grout: sp.grout }, cond, m.splash);
+      if (K.floor && K.floor.type !== 'same') m.kfloor = finishMat(K.floor, cond, m.kfloor, true); else m.kfloor = null;
       m.fridge = finishMat({ type: 'paint', colour: { steel: '#a9a9a6', white: '#e6e6e3', black: '#1e1f21' }[K.appliances || 'steel'] }, cond, m.fridge);
     }
     m.lowerFin = fin.lower && fin.lower.type !== 'none' ? fin.lower : null;
@@ -391,6 +512,7 @@ export function buildRoom(spec, opts = {}) {
     ceilings.add(ce);
   }
   root.add(ceilings);
+  worldUVs(root);
   return { root, ceilings, pick, frame: F, zones };
 }
 
@@ -492,7 +614,8 @@ export function footprint(g, item, meta) {
 
 export function lightRoom(scene, spec) {
   const neg = runDown(spec), night = spec.lighting === 'night', dusk = spec.lighting === 'dusk';
-  const hemi = new THREE.HemisphereLight(neg ? 0xffe2b8 : 0xffffff, neg ? 0x3a2a18 : 0x8a8070, neg ? 1.1 : (night ? 1.2 : 1.6));
+  // the ground colour also lights the ceiling: keep it pale so ceilings don't preview brown
+  const hemi = new THREE.HemisphereLight(neg ? 0xffe2b8 : 0xffffff, neg ? 0x8a7a64 : 0xc4beb4, neg ? 1.1 : (night ? 1.2 : 1.6));
   const dir = new THREE.DirectionalLight(neg ? 0xffd9a0 : 0xffffff, night ? 0.4 : (dusk ? 0.7 : 1.2));
   dir.position.set(-3, 6, 2);
   const amb = new THREE.AmbientLight(0xffffff, neg ? 0.25 : 0.45);
