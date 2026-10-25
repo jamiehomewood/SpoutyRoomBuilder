@@ -38,10 +38,14 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
    **Condition** (new / lived-in / worn / neglected / derelict) ages whatever finishes you chose: scuffs, grime, yellowing,
    damp stains, peeling, worn and stained floors. A neglected or derelict home also gets the run-down fittings (bare bulb,
    nets, dated kitchen).
+   **Kitchen**: unit style (matt, satin, gloss or wood) and colour, worktop (white quartz, black granite, oak, laminate in any
+   colour, stainless steel), splashback (tiles, coloured glass or the wall finish), its own floor or the room's, and appliances.
 2. **Walls**: give any wall its own finish (a feature wall, a tiled wall) under **Wall finishes**, and any alcove its own. Add alcoves, doors, windows, arches (to a kitchen or an empty room) and kitchenettes. These are built
    beyond the real walls, so deep furniture can stand in them without covering the projected floor.
 3. **Models**: add models from the library (room-tested ones first), or find more on Poly Haven / Sketchfab and import them.
    Drag them in Plan view; **R** rotates, **Back to wall** pushes one against the nearest wall facing into the room.
+   A model dragged over a table, bed or worktop sits on it; **Height** lifts it to any height (e.g. a camera on the wall),
+   **Put on what's below** and **On the floor** set it back down.
    A red outline and the warning box mean a model reaches onto the projected floor.
    **Outside** (Room tab): every window and outside door looks out on a real 360° photo from Poly Haven (CC0), which
    also lights the room. Pick garden, street, hospital grounds, car park or upper floor; day / dusk / night follows the

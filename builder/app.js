@@ -332,6 +332,26 @@ function pickAt(e) {
   return null;
 }
 
+// The height of the surface under an item's centre: the top of another model (table, bed, worktop) or the floor (0).
+// Looks straight down from just under the ceiling; ignores the item itself and anything above 2 m (wall cupboards).
+const downRay = new THREE.Raycaster();
+function surfaceBelow(it) {
+  const F = roomFrame(spec);
+  const from = b2t(+it.x || 0, +it.y || 0, Math.min(2.0, F.RH - 0.05));
+  downRay.set(from, new THREE.Vector3(0, -1, 0)); downRay.far = 2.2;
+  const targets = [...itemHolder.children.filter(o => o.userData.itemId !== it.id), ...(built?.root ? [built.root] : [])];
+  for (const h of downRay.intersectObjects(targets, true)) {
+    if (h.object.userData.isFloor || /^ceiling/.test(h.object.name)) continue;
+    const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : null;
+    if (n && n.y < 0.6) continue;                       // only tops, not sides
+    if (h.point.y < 0.02) return 0;
+    return Math.round(h.point.y * 1000) / 1000;
+  }
+  return 0;
+}
+// items sit on whatever is under them unless given their own height (it.sit === false); old items lifted off the floor keep their height
+const sits = it => it.sit ?? !(+it.z > 0);
+
 let drag = null;
 canvas.addEventListener('pointerdown', e => {
   if (camMode === 'eye') { drag = { kind: 'look', x: e.clientX, y: e.clientY, yaw: eye.yaw, pitch: eye.pitch }; canvas.setPointerCapture(e.pointerId); return; }
@@ -371,6 +391,7 @@ canvas.addEventListener('pointermove', e => {
   if (drag.kind === 'item') {
     const it = spec.items.find(i => i.id === drag.id);
     it.x = r2(snap(fp[0] + drag.off[0])); it.y = r2(snap(fp[1] + drag.off[1])); drag.moved = true;
+    if (sits(it)) it.z = surfaceBelow(it);
     const g = itemObjs.get(it.id); if (g) applyItem(g, it, catById(it.model)); drawOverlay(); showInspector();
   } else if (drag.kind === 'view') {
     const v = spec.views[drag.id]; v.x = r2(snap(fp[0] + drag.off[0])); v.y = r2(snap(fp[1] + drag.off[1])); drag.moved = true; drawOverlay();
@@ -458,7 +479,16 @@ function showInspector() {
       el('input', { type: 'range', min: 0.25, max: 3, step: 0.01, value: it.scale ?? 1, class: 'grow',
         oninput: e => { it.scale = +e.target.value; applyItem(g, it, meta); drawOverlay(); }, onchange: () => { changed({ rebuild: false, items: true }); showInspector(); } }),
       el('span', { style: 'width:38px;text-align:right' }, (+(it.scale ?? 1)).toFixed(2))),
-    mode === 'advanced' ? el('div', { class: 'row', style: 'flex-wrap:wrap' }, num('x', 'x', 0.05), num('y', 'y', 0.05), num('Raise', 'z', 0.01), num('Turn', 'rot', 5)) : null,
+    el('div', { class: 'row' }, el('label', { style: 'width:60px;color:var(--muted)' }, 'Height'),
+      el('input', { type: 'range', min: 0, max: Math.max(0.5, roomFrame(spec).RH - 0.05), step: 0.01, value: +it.z || 0, class: 'grow',
+        oninput: e => { it.z = +e.target.value; it.sit = false; applyItem(g, it, meta); drawOverlay(); e.target.nextSibling.textContent = `${(+it.z).toFixed(2)} m`; },
+        onchange: () => { changed({ rebuild: false, items: true }); showInspector(); } }),
+      el('span', { style: 'width:48px;text-align:right' }, `${(+(it.z || 0)).toFixed(2)} m`)),
+    el('div', { class: 'row' },
+      el('button', { title: 'Sit it on the table, bed, worktop or floor under it (it keeps doing this as you drag it)', onclick: () => { it.sit = true; it.z = surfaceBelow(it); changed({ rebuild: false, items: true }); showInspector(); } }, 'Put on what\'s below'),
+      el('button', { onclick: () => { it.sit = true; it.z = 0; changed({ rebuild: false, items: true }); showInspector(); } }, 'On the floor'),
+      el('span', { class: 'note', style: 'margin-left:auto' }, sits(it) ? 'sits on what\'s below' : 'own height')),
+    mode === 'advanced' ? el('div', { class: 'row', style: 'flex-wrap:wrap' }, num('x', 'x', 0.05), num('y', 'y', 0.05), num('Raise', 'z', 0.01, () => { it.sit = false; }), num('Turn', 'rot', 5)) : null,
     el('div', { class: 'row' },
       el('button', { onclick: () => duplicateItem(it.id) }, 'Duplicate'),
       el('button', { class: 'danger', onclick: () => removeItem(it.id) }, 'Remove'),
@@ -649,6 +679,33 @@ function trimEditor(t, onChange) {
     !wood ? row('Finish', el('select', { class: 'grow', onchange: e => { t.sheen = e.target.value; onChange(); } },
              (finCfg.options?.sheen || []).map(([v, l]) => el('option', { value: v, selected: v === (t.sheen || 'gloss') }, l)))) : null);
 }
+function kitchenEditor(K, onChange) {
+  K.units ||= { style: 'matt', colour: '#eeeeea' }; K.worktop ||= { type: 'quartz_white' }; K.splashback ||= { type: 'tiles', tile_size: 'metro', colour: '#efefeb' };
+  K.floor ||= { type: 'same' }; K.appliances ||= 'steel';
+  const opt = (key, value, set) => el('select', { class: 'grow', onchange: e => { set(e.target.value); onChange(); } },
+    (finCfg.options?.[key] || []).map(([v, l]) => el('option', { value: v, selected: v === value }, l)));
+  const box = el('div', { class: 'fin' });
+  box.append(row('Kitchen units', opt('kitchen_style', K.units.style, v => { K.units.style = v; if (v === 'wood') K.units.wood ||= 'oak'; else K.units.colour ||= '#eeeeea'; })));
+  if (K.units.style === 'wood')
+    box.append(row('Wood', el('select', { class: 'grow', onchange: e => { K.units.wood = e.target.value; onChange(); } },
+      (finCfg.options?.wood || []).filter(([v]) => v !== 'painted').map(([v, l]) => el('option', { value: v, selected: v === K.units.wood }, l)))));
+  else box.append(row('Colour', swatches(finCfg.palettes?.kitchen || finCfg.palettes?.paint || [], K.units.colour, hex => { K.units.colour = hex; onChange(); })));
+  box.append(row('Worktop', opt('worktop', K.worktop.type, v => { K.worktop = { type: v }; if (v === 'laminate') K.worktop.colour = '#cbbd9f'; })));
+  if (K.worktop.type === 'laminate') box.append(row('Colour', swatches(finCfg.palettes?.kitchen || [], K.worktop.colour, hex => { K.worktop.colour = hex; onChange(); })));
+  box.append(row('Splashback', opt('splashback', K.splashback.type, v => { K.splashback = v === 'tiles' ? { type: v, tile_size: 'metro', colour: '#efefeb' } : v === 'glass' ? { type: v, colour: '#c9cbc8' } : { type: v }; })));
+  if (K.splashback.type === 'tiles') {
+    box.append(row('Tile size', el('select', { class: 'grow', onchange: e => { K.splashback.tile_size = e.target.value; onChange(); } },
+      (finCfg.options?.tile_size || []).map(([v, l]) => el('option', { value: v, selected: v === K.splashback.tile_size }, l)))));
+    box.append(row('Colour', swatches(finCfg.palettes?.tiles || [], K.splashback.colour, hex => { K.splashback.colour = hex; onChange(); })));
+    box.append(row('Grout', swatches(GROUTS, K.splashback.grout, hex => { K.splashback.grout = hex; onChange(); })));
+  } else if (K.splashback.type === 'glass') box.append(row('Colour', swatches(finCfg.palettes?.kitchen || [], K.splashback.colour, hex => { K.splashback.colour = hex; onChange(); })));
+  const ownFloor = K.floor.type !== 'same';
+  box.append(row('Kitchen floor', el('select', { class: 'grow', onchange: e => { K.floor = e.target.value === 'own' ? { type: 'tiles', tile_size: 'sq30', colour: '#a9a9a5' } : { type: 'same' }; onChange(); } },
+    el('option', { value: 'same', selected: !ownFloor }, 'Same as the room'), el('option', { value: 'own', selected: ownFloor }, 'Its own floor'))));
+  if (ownFloor) box.append(finishEditor('floor', K.floor, onChange));
+  box.append(row('Appliances', opt('appliances', K.appliances, v => { K.appliances = v; })));
+  return box;
+}
 function finishesPanel() {
   const F = spec.finishes ||= presetFinishes(spec.style);
   F.walls ||= { type: 'paint', colour: '#ece7dd' }; F.lower ||= { type: 'none' }; F.floor ||= { type: 'wood', wood: 'oak' };
@@ -659,6 +716,9 @@ function finishesPanel() {
     el('p', { class: 'note' }, 'What the room is decorated with. A single wall or an alcove can have its own finish: set it on the Walls tab.'),
     finishEditor('walls', F.walls, ch), finishEditor('lower', F.lower, ch), finishEditor('floor', F.floor, ch), finishEditor('ceiling', F.ceiling, ch),
     trimEditor(F.trim, ch),
+    el('h4', {}, 'Kitchen'),
+    el('p', { class: 'note' }, 'Used by kitchenettes and kitchens through an arch.'),
+    kitchenEditor(F.kitchen ||= clone(presetFinishes(spec.style).kitchen || {}), ch),
   ];
 }
 // An override ({walls, lower}) on a wall or an alcove: "Same as …" or its own finish, starting from what it inherits.

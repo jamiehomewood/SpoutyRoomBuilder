@@ -587,6 +587,38 @@ def finish_set(prefix, walls_f, lower_f):
         lm = apply_condition(lm, "wall", peelable=lf["type"] in ("paint", "wallpaper"))
     return wm, lm, lf
 
+WORKTOPS = {"quartz_white": ((0.78, 0.77, 0.74), 0.18, 0.4, 0.0), "steel": ((0.62, 0.62, 0.6), 0.25, 0.0, 1.0)}
+
+def kitchen_materials(M):
+    """Kitchen units, worktop, splashback, kitchen floor and appliances from finishes.kitchen (any room type)."""
+    K = FIN.get("kitchen")
+    if not K: return
+    u = K.get("units", {}); style = u.get("style", "matt")
+    if style == "wood":
+        front = wood_mat("Kitchen_front", {"wood": u.get("wood", "oak")}, floor=False); carcass = front
+    else:
+        col = u.get("colour", "#eeeeea")
+        front = paint_mat("Kitchen_front", col, {"gloss": "gloss", "satin": "silk"}.get(style, "matt"), texture=0.0)
+        carcass = flat("Kitchen_carcass", shade(lin(col), 0.85), 0.6)
+    M["k_front"] = apply_condition(front, "trim")
+    M["k_carcass"] = carcass if carcass is front else apply_condition(carcass, "trim")
+    w = K.get("worktop", {}); wt = w.get("type", "quartz_white")
+    if wt == "oak": top = wood_mat("Kitchen_worktop", {"wood": "oak"}, floor=False)
+    elif wt == "granite_black": top = speckle_vinyl("Kitchen_worktop", (0.02, 0.02, 0.022), (0.035, 0.035, 0.04), fleck=(0.35, 0.33, 0.3), rough=0.15)
+    elif wt == "laminate": top = flat("Kitchen_worktop", lin(w.get("colour", "#cbbd9f")), 0.4)
+    else:
+        c, r, coat, metal = WORKTOPS.get(wt, WORKTOPS["quartz_white"]); top = flat("Kitchen_worktop", c, r, metal, coat=coat)
+    M["k_top"] = apply_condition(top, "floor")
+    sp = K.get("splashback", {}); st = sp.get("type", "tiles")
+    if st == "same": M["k_splash"] = M["wall"]
+    elif st == "glass": M["k_splash"] = flat("Kitchen_splash_glass", lin(sp.get("colour", "#c9cbc8")), 0.06, coat=1.0)
+    else: M["k_splash"] = apply_condition(tiles_mat("Kitchen_splash", sp, wall=True), "wall")
+    fl = K.get("floor", {})
+    M["k_floor"] = M["floor"] if fl.get("type", "same") == "same" else apply_condition(floor_finish_mat("Kitchen_floor", fl), "floor")
+    ap = K.get("appliances", "steel")
+    M["white_goods"] = M["steel"] if ap == "steel" else (flat("Appliance_black", (0.02, 0.02, 0.022), 0.25, coat=0.6) if ap == "black"
+                                                         else flat("White_goods", (0.85, 0.85, 0.84), 0.3, coat=0.3))
+
 def style_materials():
     M = {}
     if COURT:
@@ -675,7 +707,6 @@ def style_materials():
     M["trim"] = apply_condition(trim_finish_mat("Room_trim", FIN.get("trim", {})), "trim")
     M["hall_wall"] = M["wall"]
     if not COURT: M["hall_floor"] = M["floor"]
-    if HOME and not NEGLECT: M["k_floor"] = apply_condition(M["k_floor"], "floor")
     M["glass"] = flat("Glass", (1, 1, 1), 0.02, transmission=1.0)
     M["dark"] = flat("Dark_gap", (0.01, 0.01, 0.01), 0.8)
     M["steel"] = flat("Steel", (0.62, 0.62, 0.6), 0.25, 1.0)
@@ -688,6 +719,7 @@ def style_materials():
     M["nets"] = flat("Net_curtain", (0.86, 0.83, 0.72) if NEGLECT else (0.92, 0.92, 0.9), 1.0, alpha=0.55)
     M["blind"] = flat("Blind_slat", (0.86, 0.87, 0.85) if not NEGLECT else (0.78, 0.74, 0.62), 0.4)
     M["frosted"] = flat("Glass_frosted", (1, 1, 1), 0.45, transmission=1.0)
+    kitchen_materials(M)
     M["handrail"] = flat("Handrail_beech", (0.62, 0.45, 0.28), 0.4)
     M["vision"] = flat("Vision_panel_glass", (0.55, 0.6, 0.62), 0.05, coat=1.0)
     M["sign_blue"] = flat("Sign_blue", (0.0, 0.3, 0.6), 0.4)

@@ -100,6 +100,18 @@ function mats(style, spec) {
     m.floor = finishMat(fin.floor, cond, m.floor);
     m.ceiling = fin.ceiling?.type === 'tiles' ? m.ceiling : finishMat(fin.ceiling, cond, m.ceiling);
     m.trim = fin.trim ? finishMat(fin.trim.wood ? { type: 'wood', wood: fin.trim.wood } : { type: 'paint', colour: fin.trim.colour }, cond, m.trim) : m.trim;
+    const K = fin.kitchen;
+    if (K) {                                           // kitchen units, worktop, splashback, floor, appliances
+      const u = K.units || {};
+      m.kfront = finishMat(u.style === 'wood' ? { type: 'wood', wood: u.wood } : { type: 'paint', colour: u.colour }, cond, m.kfront);
+      const WT = { quartz_white: '#cfcdc6', granite_black: '#1c1c1e', oak: null, steel: '#a9a9a6' };
+      const wt = K.worktop?.type || 'quartz_white';
+      m.ktop = finishMat(wt === 'oak' ? { type: 'wood', wood: 'oak' } : { type: 'paint', colour: wt === 'laminate' ? K.worktop.colour : WT[wt] }, cond, m.ktop);
+      const sp = K.splashback || {};
+      m.splash = sp.type === 'same' ? null : finishMat(sp.type === 'glass' ? { type: 'paint', colour: sp.colour } : { type: 'tiles', colour: sp.colour }, cond, m.splash);
+      if (K.floor && K.floor.type !== 'same') m.kfloor = finishMat(K.floor, cond, m.kfloor); else m.kfloor = null;
+      m.fridge = finishMat({ type: 'paint', colour: { steel: '#a9a9a6', white: '#e6e6e3', black: '#1e1f21' }[K.appliances || 'steel'] }, cond, m.fridge);
+    }
     m.lowerFin = fin.lower && fin.lower.type !== 'none' ? fin.lower : null;
     m.lower = m.lowerFin ? finishMat(m.lowerFin.type === 'panelling' ? { type: 'wood', wood: m.lowerFin.wood, colour: m.lowerFin.colour } : m.lowerFin, cond, m.wall) : null;
     // per-wall and per-alcove overrides: {walls, lower}; missing parts are inherited
@@ -113,6 +125,7 @@ function mats(style, spec) {
     m.wallSet = Object.fromEntries(['north', 'south', 'east', 'west'].map(w => [w, set(spec.wall_finishes?.[w], room)]));
     m.alcoveSet = ft => set(ft.finish, m.wallSet[ft.wall] || room);
   }
+  m.splash ||= m.wall; m.kfloor ||= m.floor;
   m.wallSet ||= Object.fromEntries(['north', 'south', 'east', 'west'].map(w => [w, { wall: m.wall, lower: null, lowerFin: null }]));
   m.alcoveSet ||= ft => m.wallSet[ft.wall];
   return m;
