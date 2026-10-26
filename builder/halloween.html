@@ -51,11 +51,15 @@ function resize() { renderer.setPixelRatio(1); renderer.setSize(innerWidth, inne
 addEventListener('resize', resize); resize();
 
 // problems are shown on screen in big text: in the room there is no console to look at
-const problem = msg => { const d = document.createElement('div'); d.textContent = msg;
-  d.style.cssText = 'position:fixed;left:0;right:0;top:40%;text-align:center;font:bold 42px sans-serif;color:#ff5040;z-index:9;padding:20px';
-  document.body.appendChild(d); console.error(msg); };
-addEventListener('error', e => problem('Error: ' + (e.message || e)));
-addEventListener('unhandledrejection', e => problem('Error: ' + (e.reason?.message || e.reason)));
+// Loading problems stay up (nothing works without the files); a problem once it's running shows small at the bottom for
+// 8 seconds with where it happened, and the room carries on.
+let loaded = false;
+const problem = (msg, brief = loaded) => { const d = document.createElement('div'); d.textContent = msg;
+  d.style.cssText = brief ? 'position:fixed;left:0;right:0;bottom:4%;text-align:center;font:bold 20px sans-serif;color:#ff7060;z-index:9;opacity:.8'
+                          : 'position:fixed;left:0;right:0;top:40%;text-align:center;font:bold 42px sans-serif;color:#ff5040;z-index:9;padding:20px';
+  document.body.appendChild(d); console.error(msg); if (brief) setTimeout(() => d.remove(), 8000); };
+addEventListener('error', e => problem('Error: ' + (e.message || e) + (e.filename ? `  [${e.filename.split('/').pop().split('?')[0]}:${e.lineno}:${e.colno}]` : '')));
+addEventListener('unhandledrejection', e => problem('Error: ' + (e.reason?.message || e.reason) + (e.reason?.stack ? '  [' + String(e.reason.stack).split('\n')[1]?.trim() + ']' : '')));
 if (!LIT) problem('No lit= render named in the address');
 let spec;
 if (EMB) spec = EMB.spec;
@@ -633,11 +637,13 @@ function frame() {
   if (started && auto) {
     let ct = T - cycleStart;
     if (ct >= CYCLE) { cycleStart = T; ct = 0; nextIdx = 0; if (doorOpen < 1) setDoor(1); }
-    while (nextIdx < SCHEDULE.length && SCHEDULE[nextIdx][0] <= ct) { const [, n, ...a] = SCHEDULE[nextIdx++]; trigger(n, ...a); }
+    while (nextIdx < SCHEDULE.length && SCHEDULE[nextIdx][0] <= ct) { const [, n, ...a] = SCHEDULE[nextIdx++]; try { trigger(n, ...a); } catch (err) { problem(`Effect error (${n}): ${err.message}  [${String(err.stack).split('\n')[1]?.trim()}]`, true); } }
     if (hudOn) { const nx = SCHEDULE[nextIdx]; hud.hidden = false; hud.textContent = `Halloween cycle ${fmt(ct)} / ${fmt(CYCLE)}${nx ? `   next: ${nx[1]} in ${Math.ceil(nx[0] - ct)} s` : ''}${muted ? '   (muted)' : ''}${AC && AC.state !== 'running' ? '   (sound blocked by the browser: click or press a key)' : ''}`; }
   } else if (hudOn && started) { hud.hidden = false; hud.textContent = `Auto off: keys 1–9, 0, F, J, C, R${muted ? '   (muted)' : ''}`; }
   if (started && chair && T > nextRock) { nextRock = T + R(25, 50); if (![...active].some(f => f.isRock)) FX.rock(R(5, 9)); }   // every so often, by itself
-  for (const fx of [...active]) { if (fx.update(T - fx.t0) === false) active.delete(fx); }
+  for (const fx of [...active]) {                            // one effect going wrong mustn't stop the others
+    try { if (fx.update(T - fx.t0) === false) active.delete(fx); } catch (err) { active.delete(fx); problem('Effect error: ' + err.message + '  [' + String(err.stack).split('\n')[1]?.trim() + ']', true); }
+  }
   // the bulb: ease towards its target level, plus a faint hum wobble
   U.lightMix.value += (lightTarget - U.lightMix.value) * 0.35;
   U.bright.value = 1;
@@ -687,6 +693,7 @@ if (P.get('autostart') !== '0') start();
 setInterval(() => { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); }, 1500);
 for (const ev of ['pointerdown', 'touchstart', 'mousedown']) addEventListener(ev, () => { if (!started) start(); else { initAudio(); AC?.resume(); } }, { passive: true });
 window.__halloween = { chair, FX, setDoor, U, scene, cubeCam, cubeRT, room, EYE, THREE };                    // for testing
+loaded = true;
 requestAnimationFrame(frame);
 </script>
 </body>
