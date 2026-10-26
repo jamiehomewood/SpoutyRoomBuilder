@@ -201,9 +201,12 @@ const ghostTex = ctex(512, 640, (x, W, H) => {
   x.beginPath(); x.ellipse(W * 0.5, H * 0.45, W * 0.07, H * 0.09, 0, 0, 7); x.fill();
 });
 const batTex = ctex(256, 128, (x, W, H) => {
+  x.shadowColor = 'rgba(205,190,255,0.85)'; x.shadowBlur = 9;     // a pale moonlit rim so they show against dark walls
   x.fillStyle = '#0b090d'; x.beginPath(); x.moveTo(W / 2, H * 0.45);
   for (const s of [1, -1]) { x.moveTo(W / 2, H * 0.4); x.quadraticCurveTo(W / 2 + s * W * 0.2, H * 0.05, W / 2 + s * W * 0.48, H * 0.25); x.quadraticCurveTo(W / 2 + s * W * 0.38, H * 0.55, W / 2 + s * W * 0.3, H * 0.5); x.quadraticCurveTo(W / 2 + s * W * 0.2, H * 0.7, W / 2, H * 0.6); }
   x.fill(); x.beginPath(); x.ellipse(W / 2, H * 0.5, W * 0.05, H * 0.2, 0, 0, 7); x.fill();
+  x.shadowColor = '#ff2010'; x.shadowBlur = 6; x.fillStyle = '#ff4a30';                        // little red eyes
+  for (const s of [-1, 1]) { x.beginPath(); x.arc(W / 2 + s * W * 0.017, H * 0.38, 2.6, 0, 7); x.fill(); }
 });
 const figureTex = ctex(256, 512, (x, W, H) => {
   x.filter = 'blur(3px)'; x.fillStyle = '#020203';
@@ -300,7 +303,7 @@ function setDoor(open) {
 // ---- sprites in the scene
 const pumpkinFace = billboard(evilPumpkin, 1, 1);
 const ghost = billboard(ghostTex, 0.9, 1.15, { opacity: 0 });
-const bats = Array.from({ length: 110 }, () => billboard(batTex, 0.34, 0.17, { opacity: 1 }));
+const bats = Array.from({ length: 110 }, () => billboard(batTex, 0.42, 0.21, { opacity: 1 }));
 const figure = billboard(figureTex, 0.75, 1.8, { opacity: 0 });
 // the floor monster: a hole that is only there in the dark
 const flat = (tex, w, h, opts = {}) => { const m = billboard(tex, w, h, opts); m.rotation.x = -Math.PI / 2; return m; };
@@ -556,18 +559,23 @@ const FX = {
       return true;
     } });
   },
-  bats(dur = 9) {                                            // the room floods with bats, wheeling and swooping from the ceiling down to near the floor
-    const cx = (F.X0 + F.X1) / 2, cz = -(F.Y0 + F.Y1) / 2, rx = (F.X1 - F.X0) / 2 - 0.35, rz = (F.Y1 - F.Y0) / 2 - 0.35, spin = Math.random() < 0.5 ? -1 : 1;
-    aimAt(new THREE.Vector3(EYE.x, F.RH, EYE.z - 1.5));
+  bats(dur = 10) {                                           // the room floods with bats, wheeling round in front of the walls
+    // The ceiling isn't projected, so every bat is placed where it lands on the walls between about 0.3 m and 2.1 m up:
+    // 'hw' is the height it appears at on the wall, and its real height is worked out from how far it is from the wall.
+    const cx = (F.X0 + F.X1) / 2, cz = -(F.Y0 + F.Y1) / 2, rx = (F.X1 - F.X0) / 2 - 0.3, rz = (F.Y1 - F.Y0) / 2 - 0.3, spin = Math.random() < 0.5 ? -1 : 1;
+    aimAt(new THREE.Vector3(EYE.x, EYE.y + 0.2, EYE.z - 2));
     bats.forEach((b, i) => {
-      const r = R(0.35, 1), ph = R(0, Math.PI * 2), sp = spin * R(0.7, 1.3), h = R(0.45, F.RH - 0.15), sw = R(0.15, 0.5), delay = R(0, 1.6);   // all the way from the ceiling down near the floor
+      const r = R(0.6, 0.97), ph = R(0, Math.PI * 2), sp = spin * R(0.5, 1.1), hw0 = R(0.4, 2.0), sw = R(0.15, 0.45), delay = R(0, 1.6);
       run({ update(t) { const tt = t - delay; if (tt < 0) return true; if (tt > dur) { b.visible = false; return false; }
-        const ang = ph + sp * tt, wob = Math.sin(tt * 1.7 + i) * 0.25;
-        b.visible = true; b.position.set(cx + Math.cos(ang) * rx * Math.min(1, r + wob * 0.3), Math.max(0.3, Math.min(F.RH - 0.08, h + Math.sin(tt * 0.9 + i) * sw + Math.sin(tt * 3 + i) * 0.06)), cz + Math.sin(ang) * rz * Math.min(1, r - wob * 0.3));
+        const ang = ph + sp * tt, wob = Math.sin(tt * 1.7 + i) * 0.08;
+        const x = cx + Math.cos(ang) * rx * Math.min(0.97, r + wob), z = cz + Math.sin(ang) * rz * Math.min(0.97, r - wob);
+        const dist = Math.hypot(x - EYE.x, z - EYE.z), wall = wallHit(Math.atan2(x - EYE.x, -(z - EYE.z)), 0), dw = Math.hypot(wall.x - EYE.x, wall.z - EYE.z);
+        const hw = Math.max(0.3, Math.min(2.1, hw0 + Math.sin(tt * 0.9 + i) * sw + Math.sin(tt * 3 + i) * 0.05));
+        b.visible = true; b.position.set(x, EYE.y + (hw - EYE.y) * dist / dw, z);
         faceEye(b, false); b.scale.set(0.6 + 0.4 * Math.abs(Math.sin(tt * 18 + i)), 1, 1);
         b.material.opacity = Math.min(1, tt * 2, (dur - tt) * 2); return true; } });
     });
-    sfx('flutter', EYE.clone().setY(2), 3); setTimeout(() => sfx('flutter', EYE.clone().setY(2.1), 3), 3000); setTimeout(() => sfx('flutter', EYE.clone().setY(2), 3), 6000);
+    sfx('flutter', EYE.clone().setY(1.6), 3); setTimeout(() => sfx('flutter', EYE.clone().setY(1.4), 3), 3000); setTimeout(() => sfx('flutter', EYE.clone().setY(1.6), 3), 6500);
   },
   haunt(dur = 10) {                                          // the room shakes and its light drains through sickly green, blood red, violet and cold blue
     const cols = [[0.35, 1, 0.4], [1, 0.16, 0.1], [0.62, 0.25, 1], [0.3, 0.55, 1], [0.35, 1, 0.4]].map(c => new THREE.Vector3(...c));

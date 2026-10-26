@@ -72,7 +72,7 @@ the floor with something in it when the lights go out. Keys: 1 pumpkin, 2 spider
 7 blackout, 8 swarm, 9 bats, 0 whisper, F flicker, J floor hole, C haunting (shakes, light turns green / red / violet /
 blue), R rocking chair (it also rocks by itself every 25–50 s), K knock, A auto on/off, M mute, H help. Items marked `"live": true` in a spec are left out of the render and drawn
 live by the page (the rocking chair). The ghost, hanging spider and pumpkin face appear just in front of the
-walls (so they land on the projected walls at life size); bats fill the room from the ceiling down to near the floor. Add `&cycle=300` for a
+walls (so they land on the projected walls at life size); bats wheel round in front of the walls, between 0.3 m and 2.1 m up (the ceiling is not projected). Add `&cycle=300` for a
 5-minute loop, `&hud=0` to hide the help, `&demo=1` for every scare in under 2 minutes, `&look=1` for a flat camera view
 that turns to each scare (for screen recordings). Flashes stay under 3 a second.
 
