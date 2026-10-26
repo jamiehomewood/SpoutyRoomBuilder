@@ -1213,7 +1213,8 @@ function tabRender(body) {
   );
   api('/api/estimate', { spec, quality: q }).then(j => {
     estimateInfo = j; const e = $('#estimate');
-    if (e) e.textContent = `About ${fmtTime(j.seconds)} on this PC` + (j.ahead > 1 ? `, after ${fmtTime(j.ahead)} of renders already queued.` : '.');
+    if (e) e.textContent = `About ${fmtTime(j.seconds)} on this PC` + (j.renders ? ` (average of the last ${j.renders} ${q} render${j.renders > 1 ? 's' : ''} here)` : ' (a first guess: it learns from each render)')
+      + (j.ahead > 1 ? `, after ${fmtTime(j.ahead)} of renders already queued.` : '.');
   }).catch(() => {});
   drawQueue();
 }

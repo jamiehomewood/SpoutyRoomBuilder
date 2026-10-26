@@ -351,9 +351,17 @@ current = {"proc": None, "job": None}
 def save_queue():
     with qlock: save_json(QUEUE_FILE, QUEUE[-200:])
 
+def history_avg(quality):
+    """Average whole-job time per view for finished renders at this quality on this PC (last 10), and how many."""
+    h = [r for r in STATS.get("history", []) if r.get("quality") == quality][-10:]
+    if not h: return None, 0
+    return sum(r["seconds"] / max(1, r["views"]) for r in h) / len(h), len(h)
+
 def estimate(spec, quality):
     rx, ry, smp = QUALITIES.get(quality, QUALITIES["standard"])
     n = max(1, len(spec.get("views") or [1]))
+    avg, count = history_avg(quality)
+    if avg: return avg * n                     # what renders here have actually taken, per view
     items = len(spec.get("items", []))
     units = rx * ry / 1e6 * smp
     per_view = STATS["view_overhead"] + units * STATS["rate"] * (1.25 if spec.get("style") == "neglected" else 1.0)
@@ -400,6 +408,8 @@ def run_job(job):
     view_times = []
     rx_, ry_, smp_ = QUALITIES.get(job["quality"], QUALITIES["standard"])
     expect_view = STATS["view_overhead"] + rx_ * ry_ / 1e6 * smp_ * STATS["rate"]
+    avg_view, _ = history_avg(job["quality"])
+    if avg_view: expect_view = avg_view
     vstate = {"i": -1, "start": None, "done": False}
 
     def ticker():
@@ -460,7 +470,10 @@ def run_job(job):
             rate = max(0.001, (per_view - STATS["view_overhead"]) / units)
             STATS["rate"] = rate if STATS["jobs"] == 0 else 0.6 * STATS["rate"] + 0.4 * rate
             STATS["overhead"] = 0.7 * STATS["overhead"] + 0.3 * (render_t0 - t0)
-            STATS["jobs"] += 1; save_json(STATS_FILE, STATS)
+            STATS["jobs"] += 1
+            STATS.setdefault("history", []).append({"quality": job["quality"], "views": n_views, "seconds": round(total, 1), "at": time.time()})
+            STATS["history"] = STATS["history"][-50:]
+            save_json(STATS_FILE, STATS)
     except Exception:
         pass
     # into the library
@@ -639,7 +652,8 @@ class Handler(SimpleHTTPRequestHandler):
                 save_json(os.path.join(ROOMS, rid + ".json"), spec); return self.send_json({"id": rid})
             if path == "/api/estimate":
                 spec = data["spec"]; qual = data.get("quality", "standard")
-                return self.send_json({"seconds": estimate(spec, qual), "ahead": queue_ahead_seconds()})
+                avg, count = history_avg(qual)
+                return self.send_json({"seconds": estimate(spec, qual), "ahead": queue_ahead_seconds(), "renders": count})
             if path == "/api/render":
                 spec = data["spec"]; qual = data.get("quality", "standard")
                 if qual not in QUALITIES: qual = "standard"
