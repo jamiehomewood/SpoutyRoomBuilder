@@ -388,7 +388,7 @@ def run_job(job):
         with qlock: job.update(status="failed", message="Blender wasn't found. Set its path in Settings.")
         save_queue(); return
     cmd = [blender, "-b", "--factory-startup", "-P", GENERATOR, "--", spec_p, out, job["quality"]]
-    logf = open(os.path.join(jdir, "log.txt"), "w", encoding="utf-8", errors="replace")
+    logf = open(os.path.join(jdir, "log.txt"), "w", encoding="utf-8", errors="replace", buffering=1)   # line by line, so it can be read while rendering
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", creationflags=flags)
