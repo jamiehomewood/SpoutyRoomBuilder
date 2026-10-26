@@ -19,7 +19,7 @@ Coordinates: metres, origin at the centre of the physical room on the floor, x =
 Walls are named north/east/south/west. A feature's "pos" is its centre along the wall: x for north/south walls,
 y for east/west walls. Anything at a depth > 0 lies BEYOND the physical wall line, so it never covers the real floor.
 """
-import bpy, bmesh, json, math, os, sys, time
+import bpy, bmesh, json, math, os, random, sys, time
 from mathutils import Vector, Matrix
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -589,6 +589,89 @@ def apply_condition(m, surface, peelable=False):
     nt.links.new(col, b.inputs["Base Color"])
     return m
 
+# ============================================================== condition on objects (kitchens, appliances, furniture)
+# How beaten-up things are at each condition: surfaces get grime, grease, dust and chips; kitchens also get doors hanging
+# open, doors and handles missing. Models get the same ageing at a slightly lower level (they're moved in and out).
+CONDITION_LEVEL = {"new": 0.0, "lived_in": 0.12, "worn": 0.35, "neglected": 0.65, "derelict": 1.0}
+DMG = CONDITION_LEVEL.get(CONDITION, 0.0)
+RNG = random.Random(f"{SPEC.get('name', 'room')}|{CONDITION}")          # the same room always gets the same damage
+_aged, _orig = {}, {}
+
+def age_object_mat(m, level, kind="model"):
+    """A copy of material m aged to 'level' (0..1). kind: model, kfront (kitchen doors), appliance, steel, worktop."""
+    if not m or level <= 0.01 or not m.use_nodes: return m
+    key = (m.name, round(level, 2), kind)
+    if key in _aged: return _aged[key]
+    b0 = _bsdf(m)
+    if b0 is None: return m
+    def val(name, default=0.0):
+        i = b0.inputs.get(name); return i.default_value if i is not None and not i.links else default
+    em, ec = b0.inputs.get("Emission Strength"), b0.inputs.get("Emission Color") or b0.inputs.get("Emission")
+    if em is not None and ec is not None and (em.links or em.default_value > 0.01) and (ec.links or max(ec.default_value[:3]) > 0.01):
+        return m                                             # lights, screens, flames: leave alone
+    if val("Transmission Weight", val("Transmission", 0.0)) > 0.3 or val("Alpha", 1.0) < 0.6: return m   # glass
+    a = m.copy(); a.name = f"{m.name}~{kind}{int(level * 100)}"; _aged[key] = a; _orig[a.name] = m
+    nt = a.node_tree; b = _bsdf(a)
+    if b.inputs["Base Color"].links: col = b.inputs["Base Color"].links[0].from_socket
+    else:
+        rgb = nt.nodes.new("ShaderNodeRGB"); rgb.outputs[0].default_value = b.inputs["Base Color"].default_value; col = rgb.outputs[0]
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    def noise(scale, detail=6.0, rough=0.55):
+        n = _n(nt, "ShaderNodeTexNoise", Scale=scale, Detail=detail, Roughness=rough); nt.links.new(geo.outputs["Position"], n.inputs["Vector"]); return n.outputs["Fac"]
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["Position"], sep.inputs[0]); z = sep.outputs["Z"]
+    metal = kind in ("steel",) or val("Metallic") > 0.5
+    # faded and grubby all over
+    hs = nt.nodes.new("ShaderNodeHueSaturation"); hs.inputs["Saturation"].default_value = 1 - 0.45 * level; hs.inputs["Value"].default_value = 1 - 0.2 * level
+    nt.links.new(col, hs.inputs["Color"]); col = hs.outputs[0]
+    if kind in ("kfront", "appliance", "worktop"):           # cooking grease and nicotine: yellow-brown film
+        col = _mix(nt, 0.45 * level, col, (0.82, 0.68, 0.42), "MULTIPLY")
+    grime = _math(nt, "MULTIPLY", _maprange(nt, noise(2.2), 0.3, 0.75), 0.95 * level)
+    col = _mix(nt, grime, col, (0.4, 0.33, 0.24), "MULTIPLY")
+    # stains: darker blotches (spills, damp, nicotine)
+    st = _math(nt, "MULTIPLY", _maprange(nt, noise(3.5, 5.0, 0.6), 0.6, 0.66), 0.7 * level)
+    col = _mix(nt, st, col, (0.32, 0.24, 0.14), "MULTIPLY")
+    # dirt packed into corners and crevices
+    ao = nt.nodes.new("ShaderNodeAmbientOcclusion"); ao.inputs["Distance"].default_value = 0.06; ao.samples = 8
+    inv = _math(nt, "SUBTRACT", 1.0, ao.outputs["AO"])
+    col = _mix(nt, _math(nt, "MULTIPLY", inv, 1.1 * level), col, (0.25, 0.2, 0.14), "MULTIPLY")
+    # dust settled on upward-facing surfaces
+    nsep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["Normal"], nsep.inputs[0])
+    up = _maprange(nt, nsep.outputs["Z"], 0.6, 0.95)
+    dust = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", up, _maprange(nt, noise(6.0, 4.0), 0.25, 0.65)), 0.65 * level)
+    col = _mix(nt, dust, col, (0.5, 0.47, 0.42))
+    # chips (doors, appliances) and rust (metal, bottoms of appliances)
+    chip = None
+    if kind in ("kfront", "appliance", "worktop") and level > 0.3:
+        n = noise(5.0, 2.0, 0.5); t0 = 0.8 - 0.08 * level        # a few larger, ragged chips rather than a speckle
+        chip = _maprange(nt, n, t0, t0 + 0.008)
+        col = _mix(nt, chip, col, (0.5, 0.39, 0.25) if kind != "appliance" else (0.3, 0.13, 0.05))
+    rust = None
+    if (metal or kind == "appliance") and level > 0.3:
+        low = _maprange(nt, z, 0.45, 0.0) if kind == "appliance" else 1.0
+        n = _maprange(nt, noise(5.0, 7.0, 0.65), 0.62 - 0.15 * level, 0.72 - 0.1 * level)
+        rust = _math(nt, "MULTIPLY", n, low) if not isinstance(low, float) else n
+        col = _mix(nt, _math(nt, "MULTIPLY", rust, level), col, (0.28, 0.11, 0.04))
+    nt.links.new(col, b.inputs["Base Color"])
+    # rougher and duller; rusty patches lose their metal
+    r = b.inputs["Roughness"]
+    if not r.links: r.default_value = min(1.0, r.default_value + 0.35 * level)
+    if metal and rust is not None and not b.inputs["Metallic"].links:
+        mm = _math(nt, "SUBTRACT", b.inputs["Metallic"].default_value, _math(nt, "MULTIPLY", rust, level))
+        nt.links.new(mm, b.inputs["Metallic"])
+    return a
+
+def age_model(root, level):
+    """Age every material on an imported model (object-level slots, so other copies can keep their own condition)."""
+    if root is None: return
+    for o in [root] + list(root.children_recursive):
+        if o.type != "MESH": continue
+        for slot in o.material_slots:
+            m = slot.material
+            if not m: continue
+            m = _orig.get(m.name, m)                       # copies of an earlier item carry its aged material: start clean
+            a = age_object_mat(m, level, "model") if level > 0.01 else m
+            if a is not slot.material: slot.link = "OBJECT"; slot.material = a
+
 def finish_set(prefix, walls_f, lower_f):
     """Materials for one wall finish (+ its lower part): returns (wall material, lower material or None, lower finish)."""
     wm = apply_condition(wall_finish_mat(f"{prefix}_wall", walls_f), "wall", peelable=walls_f.get("type") in ("paint", "wallpaper"))
@@ -630,6 +713,12 @@ def kitchen_materials(M):
     ap = K.get("appliances", "steel")
     M["white_goods"] = M["steel"] if ap == "steel" else (flat("Appliance_black", (0.02, 0.02, 0.022), 0.25, coat=0.6) if ap == "black"
                                                          else flat("White_goods", (0.85, 0.85, 0.84), 0.3, coat=0.3))
+    if DMG > 0.01:                                       # the condition beats the kitchen up too
+        M["k_front"] = age_object_mat(M["k_front"], DMG, "kfront")
+        if M["k_carcass"] is not M["k_front"]: M["k_carcass"] = age_object_mat(M["k_carcass"], DMG * 0.8, "kfront")
+        M["k_top"] = age_object_mat(M["k_top"], DMG, "worktop")
+        M["white_goods"] = age_object_mat(M["white_goods"], DMG, "appliance")
+        M["k_steel"] = age_object_mat(M["steel"], DMG, "steel")
 
 def style_materials():
     M = {}
@@ -1034,6 +1123,32 @@ def shelves(ft, wall, depth, n):
     for i, z in enumerate(zs):
         wbox(f"{ft.get('id', 'alcove')}_shelf{i}", wall, u0 + 0.005, u1 - 0.005, max(0.0, depth - 0.32), depth, z, z + 0.025, MAT["shelf"])
 
+def swing_open(objs, wall, u_hinge, u_free, d, ang):
+    """Turn door objects (built in place) about a vertical hinge at (u_hinge, d) so the free edge comes out into the room."""
+    h = w2world(wall, u_hinge, d, 0); f = w2world(wall, u_free, d, 0)
+    best = None
+    for sgn in (1, -1):
+        R = Matrix.Rotation(sgn * ang, 4, "Z"); p = h + R.to_3x3() @ (f - h)
+        if best is None or p.xy.length < best[0]: best = (p.xy.length, R)
+    M_ = Matrix.Translation(h) @ best[1] @ Matrix.Translation(-h)
+    for o in objs:
+        if o is not None: o.data.transform(M_)
+
+def kitchen_door(name, wall, a, b, d0, z0, z1, mat, handle_z, hinge_left, chance=1.0):
+    """One unit door with a bar handle. In a run-down room some hang open, some lose their handle, some are gone."""
+    KS = MAT.get("k_steel", MAT["steel"]); r = RNG.random(); r2 = RNG.random()
+    if DMG >= 0.6 and r < 0.16 * DMG * chance:           # door gone: the dark inside of the cupboard shows
+        wbox(f"{name}_void", wall, a + 0.015, b - 0.015, d0 + 0.019, d0 + 0.0205, z0 + 0.015, z1 - 0.015, MAT["dark"])
+        return
+    door_o = wbox(name, wall, a, b, d0, d0 + 0.02, z0, z1, mat)
+    handle_o = None
+    if not (DMG >= 0.35 and r2 < 0.35 * DMG):             # handle missing (screw holes not modelled)
+        hu = b - 0.06 if hinge_left else a + 0.06
+        handle_o = wbox(f"{name}_handle", wall, hu - 0.008, hu + 0.008, d0 - 0.028, d0, handle_z - 0.07, handle_z + 0.07, KS)
+    if DMG >= 0.3 and r < 0.5 * DMG * chance:              # hanging open
+        ang = math.radians(RNG.uniform(10, 25 + 55 * DMG))
+        swing_open([door_o, handle_o], wall, a if hinge_left else b, b if hinge_left else a, d0, ang)
+
 def kitchen_run(wall, u0, u1, back_d, name, tall_end="hi"):
     """A fitted kitchen along a back wall at depth back_d, facing the room. Fridge-freezer at one end."""
     BD, BH, PL = 0.6, 0.9, 0.12            # base depth, height, plinth
@@ -1051,13 +1166,13 @@ def kitchen_run(wall, u0, u1, back_d, name, tall_end="hi"):
     n = max(1, round((ru1 - ru0) / 0.6)); dw = (ru1 - ru0) / n
     for i in range(n):
         a, b = ru0 + i * dw + 0.002, ru0 + (i + 1) * dw - 0.002
-        wbox(f"{name}_door{i}", wall, a, b, d_front, d_front + 0.02, PL + 0.003, BH - 0.045, MAT["k_front"])
+        kitchen_door(f"{name}_door{i}", wall, a, b, d_front, PL + 0.003, BH - 0.045, MAT["k_front"], BH - 0.12, hinge_left=i % 2 == 0)
     # sink and hob
     sink_u = ru0 + (ru1 - ru0) * 0.3; hob_u = ru0 + (ru1 - ru0) * 0.72
-    wbox(f"{name}_sink", wall, sink_u - 0.3, sink_u + 0.3, d_front + 0.08, back_d - 0.12, BH - 0.005, BH + 0.001, MAT["steel"])
+    wbox(f"{name}_sink", wall, sink_u - 0.3, sink_u + 0.3, d_front + 0.08, back_d - 0.12, BH - 0.005, BH + 0.001, MAT.get("k_steel", MAT["steel"]))
     wbox(f"{name}_sink_bowl", wall, sink_u - 0.22, sink_u + 0.22, d_front + 0.12, back_d - 0.16, BH - 0.004, BH + 0.002, MAT["dark"])
     tap = w2world(wall, sink_u, back_d - 0.07, BH + 0.15)
-    cylinder_obj(f"{name}_tap", 0.012, 0.3, tap, MAT["steel"], verts=16)
+    cylinder_obj(f"{name}_tap", 0.012, 0.3, tap, MAT.get("k_steel", MAT["steel"]), verts=16)
     wbox(f"{name}_hob", wall, hob_u - 0.3, hob_u + 0.3, d_front + 0.04, back_d - 0.04, BH, BH + 0.006, MAT["black_glass"] if not NEGLECT else MAT["white_goods"])
     # splashback between worktop and wall units
     wbox(f"{name}_splash", wall, ru0, ru1, back_d - 0.01, back_d, BH, WZ0, MAT["k_splash"])
@@ -1067,10 +1182,11 @@ def kitchen_run(wall, u0, u1, back_d, name, tall_end="hi"):
         wbox(f"{name}_wallunit{i}", wall, a, b, back_d - WD, back_d, WZ0, WZ1, MAT["k_carcass"])
         m_ = max(1, round((b - a) / 0.5)); w_ = (b - a) / m_
         for j in range(m_):
-            wbox(f"{name}_wdoor{i}_{j}", wall, a + j * w_ + 0.002, a + (j + 1) * w_ - 0.002, back_d - WD - 0.02, back_d - WD, WZ0 + 0.003, WZ1 - 0.003, MAT["k_front"])
+            kitchen_door(f"{name}_wdoor{i}_{j}", wall, a + j * w_ + 0.002, a + (j + 1) * w_ - 0.002, back_d - WD - 0.02, WZ0 + 0.003, WZ1 - 0.003,
+                         MAT["k_front"], WZ0 + 0.1, hinge_left=j % 2 == 0, chance=0.7)
     # cooker hood
-    wbox(f"{name}_hood", wall, hob_u - 0.3, hob_u + 0.3, back_d - 0.48, back_d, WZ0 + 0.15, WZ0 + 0.22, MAT["steel"])
-    wbox(f"{name}_hood_chimney", wall, hob_u - 0.13, hob_u + 0.13, back_d - 0.26, back_d, WZ0 + 0.22, RH, MAT["steel"])
+    wbox(f"{name}_hood", wall, hob_u - 0.3, hob_u + 0.3, back_d - 0.48, back_d, WZ0 + 0.15, WZ0 + 0.22, MAT.get("k_steel", MAT["steel"]))
+    wbox(f"{name}_hood_chimney", wall, hob_u - 0.13, hob_u + 0.13, back_d - 0.26, back_d, WZ0 + 0.22, RH, MAT.get("k_steel", MAT["steel"]))
     # under-cabinet LED strip (modern) as a soft area light
     if not NEGLECT:
         c = w2world(wall, (ru0 + ru1) / 2, back_d - WD + 0.06, WZ0 - 0.02)
@@ -1493,8 +1609,10 @@ for it in SPEC.get("items", []):
     if it.get("live"):                 # drawn live by a scene page (e.g. a rocking chair in the Halloween room): not in the render
         USED.add(it["model"]); continue
     try:
-        place_model(it["model"], Vector((float(it.get("x", 0)), float(it.get("y", 0)), float(it.get("z", 0)))),
-                    math.radians(float(it.get("rot", 0))), float(it.get("scale", 1.0)))
+        lvl = CONDITION_LEVEL.get(it["condition"], 0.0) if it.get("condition") in CONDITION_LEVEL else DMG * 0.8   # own condition, or the room's
+        root = place_model(it["model"], Vector((float(it.get("x", 0)), float(it.get("y", 0)), float(it.get("z", 0)))),
+                           math.radians(float(it.get("rot", 0))), float(it.get("scale", 1.0)))
+        age_model(root, lvl)
     except Exception as e:
         import traceback; traceback.print_exc(); log("item failed", it.get("model"), e)
 

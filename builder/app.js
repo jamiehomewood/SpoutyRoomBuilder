@@ -535,6 +535,12 @@ function showInspector() {
       el('button', { title: 'Sit it on the table, bed, worktop or floor under it (it keeps doing this as you drag it)', onclick: () => { it.sit = true; it.z = surfaceBelow(it); changed({ rebuild: false, items: true }); showInspector(); } }, 'Put on what\'s below'),
       el('button', { onclick: () => { it.sit = true; it.z = 0; changed({ rebuild: false, items: true }); showInspector(); } }, 'On the floor'),
       el('span', { class: 'note', style: 'margin-left:auto' }, sits(it) ? 'sits on what\'s below' : 'own height')),
+    spec.style !== 'outdoor' ? el('div', { class: 'row' }, el('label', { style: 'width:60px;color:var(--muted)' }, 'Condition'),
+      (() => { const sel = el('select', { class: 'grow', onchange: e => { if (e.target.value) it.condition = e.target.value; else delete it.condition;
+          applyItem(g, it, meta); changed({ rebuild: false, items: true }); } },
+          el('option', { value: '' }, `Same as the room (${(((finCfg.conditions || []).find(c => c[0] === (spec.condition || 'new')) || [])[1] || spec.condition || 'new').toLowerCase()})`),
+          ...(finCfg.conditions || []).map(([v, l]) => el('option', { value: v }, l)));
+        sel.value = it.condition || ''; return sel; })()) : null,
     mode === 'advanced' ? el('div', { class: 'row', style: 'flex-wrap:wrap' }, num('x', 'x', 0.05), num('y', 'y', 0.05), num('Raise', 'z', 0.01, () => { it.sit = false; }), num('Turn', 'rot', 5)) : null,
     el('div', { class: 'row' },
       el('button', { onclick: () => duplicateItem(it.id) }, 'Duplicate'),

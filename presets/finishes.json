@@ -681,7 +681,7 @@
       ],
       [
         "diagonal",
-        "Diagonal (45\u00b0)"
+        "Diagonal (45°)"
       ]
     ]
   },
@@ -699,17 +699,17 @@
     [
       "worn",
       "Worn",
-      "Tired and faded: scuffs, marks, grubby patches, worn floor paths."
+      "Tired and faded: scuffs, marks, grubby patches, worn floor paths. Furniture and kitchen look tired."
     ],
     [
       "neglected",
       "Neglected",
-      "Dirty and stained: yellowed walls, damp patches, stained floors, some peeling."
+      "Dirty and stained: yellowed walls, damp patches, stained floors, some peeling. Furniture grimy and dusty; kitchen greasy, chipped, some doors hanging open or handles missing."
     ],
     [
       "derelict",
       "Derelict",
-      "Badly damaged: big damp stains, peeling paper and paint, filthy floors."
+      "Badly damaged: big damp stains, peeling paper and paint, filthy floors. Furniture filthy and rusting; kitchen wrecked: doors hanging off or gone, chipped and rusty."
     ]
   ],
   "presets": {

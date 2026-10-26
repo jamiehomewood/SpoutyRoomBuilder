@@ -50,6 +50,26 @@ export function styleColours(style) {
 const WOOD_HEX = { light_oak: 0xd9c4a3, oak: 0xa87a4a, dark_oak: 0x5a3d26, pine: 0xd8b07a, grey: 0xa8a49c };
 const BRICK_HEX = { red: 0x8a4a36, yellow: 0xb39a6a, painted: 0xe6e4dc };
 const COND_SHADE = { new: 1, lived_in: 0.97, worn: 0.9, neglected: 0.78, derelict: 0.66 };
+// how beaten-up models look at each condition (the render adds grime, dust and rust; the preview just greys and darkens)
+export const CONDITION_LEVEL = { new: 0, lived_in: 0.12, worn: 0.35, neglected: 0.65, derelict: 1 };
+let roomCondition = 'new';
+const GRIME = new THREE.Color(0x5a4a36);
+function ageItem(g, item) {
+  const lvl = item.condition in CONDITION_LEVEL ? CONDITION_LEVEL[item.condition] : CONDITION_LEVEL[roomCondition] * 0.8;
+  if (g.userData.aged === lvl) return; g.userData.aged = lvl;
+  g.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    if (!o.userData.origMats) o.userData.origMats = mats;
+    const aged = o.userData.origMats.map(m => {
+      if (lvl <= 0.01 || !m.color || m.transparent || (m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex())) return m;
+      const c = m.clone(); c.color = m.color.clone().lerp(GRIME, 0.35 * lvl).multiplyScalar(1 - 0.2 * lvl);
+      if ('roughness' in c) c.roughness = Math.min(1, (m.roughness ?? 0.5) + 0.3 * lvl);
+      return c;
+    });
+    o.material = Array.isArray(o.material) ? aged : aged[0];
+  });
+}
 const hexNum = h => parseInt(String(h || '#888888').replace('#', ''), 16);
 function mixHex(a, b, t) {
   const ca = new THREE.Color(a), cb = new THREE.Color(b); return ca.lerp(cb, t).getHex();
@@ -327,6 +347,7 @@ export function archSpring(f, RH) {
 
 // ------------------------------------------------------------------ the room
 export function buildRoom(spec, opts = {}) {
+  roomCondition = spec.condition || (spec.style === 'neglected' ? 'neglected' : 'new');
   const F = roomFrame(spec);
   if (spec.style === 'outdoor' || spec.room?.type === 'outdoor') {
     // outdoors there is no room: just a faint ground disc to stand models on (the photo sphere shows the place)
@@ -648,6 +669,7 @@ export function applyItem(g, item, meta) {
   g.scale.setScalar(s);
   g.rotation.set(0, (+(item.rot ?? 0)) * Math.PI / 180, 0);
   g.position.copy(b2t(+item.x || 0, +item.y || 0, +(item.z ?? 0)));
+  ageItem(g, item);
 }
 
 // footprint corners of an item in spec space (x, y), for the floor check and wall snapping
