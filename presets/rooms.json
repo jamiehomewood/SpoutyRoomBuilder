@@ -1,14 +1,68 @@
 {
-  "_note": "Physical rooms the builder can start from. Sizes in metres: width runs west-east (x), depth runs south-north (y). Add the other rooms here once measured, or save custom sizes from the builder.",
+  "_note": "Physical rooms the builder can start from. Sizes in metres (inside faces of the walls): width runs west-east (x), depth runs south-north (y). eye = the projection centre height (half the room height). real_doors = where the room's own doors are (wall, centre along the wall from the room centre, width, height), from the room scans.",
   "rooms": [
     {
       "id": "igloo-main",
-      "name": "Igloo room (Glenda)",
-      "width": 6.40,
+      "name": "Peterborough (Igloo room)",
+      "width": 6.4,
       "depth": 5.71,
       "height": 2.244,
       "eye": 1.12,
-      "projected": { "walls": true, "floor": true, "ceiling": false }
+      "projected": {
+        "walls": true,
+        "floor": true,
+        "ceiling": false
+      }
+    },
+    {
+      "id": "helmore-big",
+      "name": "Helmore big room",
+      "width": 5.36,
+      "depth": 6.36,
+      "height": 2.815,
+      "eye": 1.41,
+      "projected": {
+        "walls": true,
+        "floor": true,
+        "ceiling": false
+      },
+      "real_doors": [
+        {
+          "wall": "south",
+          "pos": 0.05,
+          "width": 0.83,
+          "height": 1.95
+        },
+        {
+          "wall": "west",
+          "pos": 0.47,
+          "width": 0.79,
+          "height": 1.9
+        }
+      ],
+      "source": "new rooms/Helmore_Big_Room_3D_Scan.fbx"
+    },
+    {
+      "id": "whb-406",
+      "name": "WHB 406",
+      "width": 5.04,
+      "depth": 7.71,
+      "height": 2.915,
+      "eye": 1.46,
+      "projected": {
+        "walls": true,
+        "floor": true,
+        "ceiling": false
+      },
+      "real_doors": [
+        {
+          "wall": "west",
+          "pos": 3.36,
+          "width": 0.89,
+          "height": 2.1
+        }
+      ],
+      "source": "new rooms/Room_WHB-406.fbx"
     }
   ]
 }
