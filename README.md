@@ -68,8 +68,11 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
 sound (browsers block audio until then). It plays an 8-minute loop of flickers, blackouts, lightning (with a figure at the
 window), creaks, groans, door slams, footsteps, whispers, a lunging pumpkin, spiders, bats, a ghost, and a hole that opens in
 the floor with something in it when the lights go out. Keys: 1 pumpkin, 2 spider, 3 ghost, 4 door, 5 lightning, 6 groan,
-7 blackout, 8 swarm, 9 bats, 0 whisper, F flicker, J floor hole, K knock, A auto on/off, M mute, H help. Add
-`&cycle=300` for a 5-minute loop, `&hud=0` to hide the help. Flashes stay under 3 a second.
+7 blackout, 8 swarm, 9 bats, 0 whisper, F flicker, J floor hole, C haunting (shakes, light turns green / red / violet /
+blue), K knock, A auto on/off, M mute, H help. The ghost, hanging spider and pumpkin face appear just in front of the
+walls (so they land on the projected walls at life size); bats fill the space under the ceiling. Add `&cycle=300` for a
+5-minute loop, `&hud=0` to hide the help, `&demo=1` for every scare in under 2 minutes, `&look=1` for a flat camera view
+that turns to each scare (for screen recordings). Flashes stay under 3 a second.
 
 **See it in the room while editing:** give Spouty `http://localhost:8030/builder/live.html` (4096 × 2048). It shows a plain
 version of the room you're editing and updates as you change it.
