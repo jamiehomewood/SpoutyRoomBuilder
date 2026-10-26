@@ -34,7 +34,8 @@ import * as THREE from 'three';
 import { buildRoom, roomFrame, b2t, span } from './scene.js';
 
 const P = new URLSearchParams(location.search);
-const LIT = P.get('lit'), DARK = P.get('dark'), VIEW = P.get('view') || 'centre';
+const EMB = window.__HW_DATA || null;                      // the stand-alone copy carries its room and renders inside the file
+const LIT = EMB ? EMB.litName : P.get('lit'), DARK = EMB ? EMB.darkName : P.get('dark'), VIEW = P.get('view') || 'centre';
 const LOOK = P.get('look') === '1';                       // &look=1: a flat camera view that turns to each scare (for screen recording)
 const DEMO = P.get('demo') === '1';                       // &demo=1: every scare in about 90 s (for showing people / recording)
 const CYCLE = +(P.get('cycle') || (DEMO ? 106 : 480));
@@ -55,17 +56,21 @@ const problem = msg => { const d = document.createElement('div'); d.textContent 
 addEventListener('error', e => problem('Error: ' + (e.message || e)));
 addEventListener('unhandledrejection', e => problem('Error: ' + (e.reason?.message || e.reason)));
 if (!LIT) problem('No lit= render named in the address');
-const specRes = await fetch(`/library/${encodeURIComponent(LIT)}/spec.json`).catch(() => null);
-if (!specRes || !specRes.ok) problem(`Can't find library/${LIT}/spec.json on this PC (is that render folder copied, and the server running?)`);
-const spec = await specRes.json();
+let spec;
+if (EMB) spec = EMB.spec;
+else {
+  const specRes = await fetch(`/library/${encodeURIComponent(LIT)}/spec.json`).catch(() => null);
+  if (!specRes || !specRes.ok) problem(`Can't find library/${LIT}/spec.json on this PC (is that render folder copied, and the server running?)`);
+  spec = await specRes.json();
+}
 const F = roomFrame(spec);
 const view = (spec.views || []).find(v => v.name === VIEW) || spec.views?.[0] || { x: 0, y: 0, yaw: 0 };
 const EYE = b2t(+view.x || 0, +view.y || 0, +(view.z ?? F.eye));
 
 const loader = new THREE.TextureLoader();
 const loadTex = url => new Promise(res => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; res(t); }, undefined, () => res(null)));
-const texLit = await loadTex(`/library/${encodeURIComponent(LIT)}/view_${VIEW}.jpg`);
-const texDark = DARK ? (await loadTex(`/library/${encodeURIComponent(DARK)}/view_${VIEW}.jpg`)) : null;
+const texLit = await loadTex(EMB ? EMB.lit : `/library/${encodeURIComponent(LIT)}/view_${VIEW}.jpg`);
+const texDark = DARK ? (await loadTex(EMB ? EMB.dark : `/library/${encodeURIComponent(DARK)}/view_${VIEW}.jpg`)) : null;
 if (!texLit) problem(`Can't load library/${LIT}/view_${VIEW}.jpg on this PC`);
 if (DARK && !texDark) problem(`Can't load library/${DARK}/view_${VIEW}.jpg on this PC`);
 
@@ -120,7 +125,7 @@ const compCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 // ------------------------------------------------------------------ the 3D overlay scene
 const scene = new THREE.Scene();
 // an invisible copy of the room: writes depth only, so effects behind walls are hidden; glass and nets let them through
-const room = buildRoom(spec);
+const room = buildRoom(EMB ? { ...spec, items: [], decals: [] } : spec);   // stand-alone: walls only (no model files to load)
 room.root.traverse(o => {
   if (!o.isMesh) return;
   const m = o.material, see = m && (m.transparent || m.opacity < 1);

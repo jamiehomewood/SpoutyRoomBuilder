@@ -75,6 +75,11 @@ walls (so they land on the projected walls at life size); bats fill the space un
 5-minute loop, `&hud=0` to hide the help, `&demo=1` for every scare in under 2 minutes, `&look=1` for a flat camera view
 that turns to each scare (for screen recordings). Flashes stay under 3 a second.
 
+**Haunted room without a server:** `node tools/make_halloween_standalone.mjs <lit id> <dark id> Halloween_Room.html`
+(needs Node and `npm i esbuild` once) makes one file with everything inside it, the two renders included. Copy that one
+file to any PC and open it, or point an ICE web layer at it: no Python, no server, no Spouty. It shows the walls only for
+hiding effects (no furniture models), which makes no visible difference.
+
 **See it in the room while editing:** give Spouty `http://localhost:8030/builder/live.html` (4096 × 2048). It shows a plain
 version of the room you're editing and updates as you change it.
 
