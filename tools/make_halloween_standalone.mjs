@@ -20,7 +20,18 @@ const res = await build({ entryPoints: [entry], bundle: true, format: 'esm', wri
 fs.unlinkSync(entry);
 const lib = id => path.join(ROOT, 'library', id);
 const uri = f => 'data:image/jpeg;base64,' + fs.readFileSync(f).toString('base64');
-const data = { litName: lit, darkName: dark, spec: JSON.parse(fs.readFileSync(path.join(lib(lit), 'spec.json'), 'utf8')),
+const spec = JSON.parse(fs.readFileSync(path.join(lib(lit), 'spec.json'), 'utf8'));
+// live items (e.g. the rocking chair) go in as self-contained glTF: buffers and textures inlined as data URIs
+const MIME = { '.bin': 'application/octet-stream', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
+const models = {};
+for (const it of (spec.items || []).filter(i => i.live)) {
+  const dir = path.join(ROOT, 'catalogue/models', it.model), meta = JSON.parse(fs.readFileSync(path.join(dir, 'model.json'), 'utf8'));
+  const g = JSON.parse(fs.readFileSync(path.join(dir, meta.file), 'utf8'));
+  const inline = o => { if (o.uri && !o.uri.startsWith('data:')) { const f = path.join(dir, decodeURIComponent(o.uri)); o.uri = `data:${MIME[path.extname(f).toLowerCase()] || 'application/octet-stream'};base64,` + fs.readFileSync(f).toString('base64'); } };
+  (g.buffers || []).forEach(inline); (g.images || []).forEach(inline);
+  models[it.model] = { meta, gltf: 'data:model/gltf+json;base64,' + Buffer.from(JSON.stringify(g)).toString('base64') };
+}
+const data = { litName: lit, darkName: dark, spec, models,
   lit: uri(path.join(lib(lit), 'view_centre.jpg')), dark: uri(path.join(lib(dark), 'view_centre.jpg')) };
 const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 let html = page.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/, '')

@@ -70,8 +70,9 @@ browser holds the sound back, any click or key press starts it (in Spouty and IC
 window), creaks, groans, door slams, footsteps, whispers, a lunging pumpkin, spiders, bats, a ghost, and a hole that opens in
 the floor with something in it when the lights go out. Keys: 1 pumpkin, 2 spider, 3 ghost, 4 door, 5 lightning, 6 groan,
 7 blackout, 8 swarm, 9 bats, 0 whisper, F flicker, J floor hole, C haunting (shakes, light turns green / red / violet /
-blue), K knock, A auto on/off, M mute, H help. The ghost, hanging spider and pumpkin face appear just in front of the
-walls (so they land on the projected walls at life size); bats fill the space under the ceiling. Add `&cycle=300` for a
+blue), R rocking chair (it also rocks by itself every 25–50 s), K knock, A auto on/off, M mute, H help. Items marked `"live": true` in a spec are left out of the render and drawn
+live by the page (the rocking chair). The ghost, hanging spider and pumpkin face appear just in front of the
+walls (so they land on the projected walls at life size); bats fill the room from the ceiling down to near the floor. Add `&cycle=300` for a
 5-minute loop, `&hud=0` to hide the help, `&demo=1` for every scare in under 2 minutes, `&look=1` for a flat camera view
 that turns to each scare (for screen recordings). Flashes stay under 3 a second.
 

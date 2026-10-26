@@ -19,7 +19,7 @@ canvas { width: 100vw; height: 100vh; display: block; }
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="start">Click to start the Halloween room<small>sound needs a click · keys 1–9, 0, F, J, C trigger scares · A auto · M mute · H hide this</small></div>
+<div id="start">Click to start the Halloween room<small>sound needs a click · keys 1–9, 0, F, J, C, R trigger scares · A auto · M mute · H hide this</small></div>
 <div id="hud" hidden></div>
 <script type="module">
 // Halloween scare layer for a Room Builder render, shown as one equirectangular 360 image (give it to Spouty at
@@ -31,7 +31,8 @@ canvas { width: 100vw; height: 100vh; display: block; }
 // hidden behind an invisible copy of the room's walls so they only show where they should (e.g. the figure through the window).
 // Photosensitivity: no more than two flashes in any second, flicker steps at least 0.35 s apart.
 import * as THREE from 'three';
-import { buildRoom, roomFrame, b2t, span } from './scene.js';
+import { buildRoom, roomFrame, b2t, span, applyItem } from './scene.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const P = new URLSearchParams(location.search);
 const EMB = window.__HW_DATA || null;                      // the stand-alone copy carries its room and renders inside the file
@@ -125,7 +126,7 @@ const compCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 // ------------------------------------------------------------------ the 3D overlay scene
 const scene = new THREE.Scene();
 // an invisible copy of the room: writes depth only, so effects behind walls are hidden; glass and nets let them through
-const room = buildRoom(EMB ? { ...spec, items: [], decals: [] } : spec);   // stand-alone: walls only (no model files to load)
+const room = buildRoom(EMB ? { ...spec, items: [], decals: [] } : { ...spec, items: (spec.items || []).filter(i => !i.live) });   // stand-alone: walls only (no model files to load)
 room.root.traverse(o => {
   if (!o.isMesh) return;
   const m = o.material, see = m && (m.transparent || m.opacity < 1);
@@ -139,6 +140,25 @@ const bulb = new THREE.PointLight(0xffd8a0, 3, 9, 1.4); bulb.position.copy(b2t(0
 const flashLight = new THREE.DirectionalLight(0xcfe0ff, 0); scene.add(flashLight); scene.add(flashLight.target);
 
 const items = spec.items || [];
+// ---- live items: models marked "live" are left out of the renders and drawn here so they can move (the rocking chair)
+const live = [];
+for (const it of items.filter(i => i.live)) {
+  try {
+    const meta = EMB ? EMB.models[it.model].meta : await (await fetch(`/catalogue/models/${encodeURIComponent(it.model)}/model.json`)).json();
+    const url = EMB ? EMB.models[it.model].gltf : `/catalogue/models/${encodeURIComponent(it.model)}/${meta.file}`;
+    const gl = await new GLTFLoader().loadAsync(url), m = gl.scene;
+    m.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3());
+    m.position.set(-c.x, -box.min.y, -c.z);
+    const rocker = new THREE.Group(); rocker.add(m); const g = new THREE.Group(); g.add(rocker);
+    applyItem(g, it, meta); scene.add(g);
+    m.traverse(o => { if (o.isMesh && o.material) { o.material.envMapIntensity = 0; } });
+    live.push({ it, g, rocker, len: box.getSize(new THREE.Vector3()).z });
+  } catch (e) { console.warn('live item failed', it.model, e); }
+}
+const chair = live.find(l => /rock/i.test(l.it.model));
+if (chair) {                                                 // the candles and pumpkin beside it light it, warm and low
+  const warm = new THREE.PointLight(0xff9a40, 1.6, 3.5, 1.6); warm.position.copy(chair.g.position).add(new THREE.Vector3(0, 0.6, 0)).lerp(EYE.clone().setY(0.6), 0.15); scene.add(warm);
+}
 const PUMPKINS = items.filter(i => i.model === 'rb_jack_o_lantern').map(i => b2t(+i.x, +i.y, +(i.z || 0) + 0.15 * (+i.scale || 1)));
 const CLOCK = items.find(i => /clock/.test(i.model));
 const WINDOW = (spec.features || []).find(f => f.type === 'window');
@@ -280,7 +300,7 @@ function setDoor(open) {
 // ---- sprites in the scene
 const pumpkinFace = billboard(evilPumpkin, 1, 1);
 const ghost = billboard(ghostTex, 0.9, 1.15, { opacity: 0 });
-const bats = Array.from({ length: 48 }, () => billboard(batTex, 0.34, 0.17, { opacity: 1 }));
+const bats = Array.from({ length: 110 }, () => billboard(batTex, 0.34, 0.17, { opacity: 1 }));
 const figure = billboard(figureTex, 0.75, 1.8, { opacity: 0 });
 // the floor monster: a hole that is only there in the dark
 const flat = (tex, w, h, opts = {}) => { const m = billboard(tex, w, h, opts); m.rotation.x = -Math.PI / 2; return m; };
@@ -408,7 +428,7 @@ const sfx = (name, ...a) => { if (AC && !muted) try { SFX[name](...a); } catch (
 
 // ------------------------------------------------------------------ effects (each returns a duration; animate() runs them)
 const active = new Set();                                  // {update(t) -> false when finished}
-let lastFlash = -10;
+let lastFlash = -10, nextRock = performance.now() / 1000 + 15;
 function run(fx) { fx.t0 = performance.now() / 1000; active.add(fx); }
 const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 let lightTarget = 1, bulbFlicker = null;
@@ -438,6 +458,18 @@ const FX = {
     run({ update(t) { const k = Math.min(1, t / 0.32); setDoor(1 - k * k); if (k >= 1 && !this.done) { this.done = true; sfx('slam', p); shake(0.9, 0.8); } return t < 0.5; } }); },
   creakOpen(dur = 7) { if (!doorLeaf) return; const p = doorLeaf.position.clone(); p.y = 1.2; aimAt(p); sfx('creak', p, dur * 0.8); setTimeout(() => sfx('creak', p, 2), dur * 500);
     const start = doorOpen; run({ update(t) { setDoor(start + (1 - start) * ease(t / dur)); return t < dur; } }); },
+  rock(dur = 7) {                                            // the empty rocking chair starts to rock by itself, creaking, then settles
+    if (!chair) return; const p = chair.g.position.clone().setY(0.5); aimAt(p);
+    let side = 0;
+    run({ isRock: true, update(t) {
+      const amp = 0.16 * Math.min(1, t / 1.2) * Math.max(0, Math.min(1, (dur - t) / 2.5)), ph = t * Math.PI * 2 / 1.7;
+      chair.rocker.rotation.x = amp * Math.sin(ph);
+      if (t < dur - 1) aimAt(p);                             // camera mode: keep watching it
+      const s = Math.sign(Math.cos(ph)); if (s !== side && amp > 0.04) { side = s; sfx('creak', p, 0.45); }
+      if (t > dur) { chair.rocker.rotation.x = 0; return false; }
+      return true;
+    } });
+  },
   knock() { if (doorLeaf) sfx('knock', doorLeaf.position.clone().setY(1.3)); },
   footsteps(from, to, n = 8, gap = 0.55) {
     from = from || b2t(R(-2, 2), -F.D / 2 - 1.5, 2.6); to = to || b2t(R(-2, 2), F.D / 2 + 1, 2.6);
@@ -524,14 +556,14 @@ const FX = {
       return true;
     } });
   },
-  bats(dur = 9) {                                            // the room floods with bats wheeling under the ceiling (the ceiling is projected)
+  bats(dur = 9) {                                            // the room floods with bats, wheeling and swooping from the ceiling down to near the floor
     const cx = (F.X0 + F.X1) / 2, cz = -(F.Y0 + F.Y1) / 2, rx = (F.X1 - F.X0) / 2 - 0.35, rz = (F.Y1 - F.Y0) / 2 - 0.35, spin = Math.random() < 0.5 ? -1 : 1;
     aimAt(new THREE.Vector3(EYE.x, F.RH, EYE.z - 1.5));
     bats.forEach((b, i) => {
-      const r = R(0.35, 1), ph = R(0, Math.PI * 2), sp = spin * R(0.7, 1.3), h = R(F.RH - 0.75, F.RH - 0.12), delay = R(0, 1.6);
+      const r = R(0.35, 1), ph = R(0, Math.PI * 2), sp = spin * R(0.7, 1.3), h = R(0.45, F.RH - 0.15), sw = R(0.15, 0.5), delay = R(0, 1.6);   // all the way from the ceiling down near the floor
       run({ update(t) { const tt = t - delay; if (tt < 0) return true; if (tt > dur) { b.visible = false; return false; }
         const ang = ph + sp * tt, wob = Math.sin(tt * 1.7 + i) * 0.25;
-        b.visible = true; b.position.set(cx + Math.cos(ang) * rx * Math.min(1, r + wob * 0.3), h + Math.sin(tt * 3 + i) * 0.1, cz + Math.sin(ang) * rz * Math.min(1, r - wob * 0.3));
+        b.visible = true; b.position.set(cx + Math.cos(ang) * rx * Math.min(1, r + wob * 0.3), Math.max(0.3, Math.min(F.RH - 0.08, h + Math.sin(tt * 0.9 + i) * sw + Math.sin(tt * 3 + i) * 0.06)), cz + Math.sin(ang) * rz * Math.min(1, r - wob * 0.3));
         faceEye(b, false); b.scale.set(0.6 + 0.4 * Math.abs(Math.sin(tt * 18 + i)), 1, 1);
         b.material.opacity = Math.min(1, tt * 2, (dur - tt) * 2); return true; } });
     });
@@ -575,7 +607,7 @@ const TIMELINE = [
 ];
 const DEMO_TIMELINE = [
   [3, 'creak'], [7, 'flicker', 3], [12, 'groan', 0.6], [17, 'lightning', { figure: 'near', near: 1 }], [23, 'slam'], [28, 'bats'],
-  [33, 'pumpkin', 0], [41, 'spider'], [49, 'whisper', 'left'], [52, 'floorMonster', 6], [62, 'ghost'], [70, 'creakOpen', 5],
+  [30, 'rock', 6], [37, 'pumpkin', 0], [41, 'spider'], [49, 'whisper', 'left'], [52, 'floorMonster', 6], [62, 'ghost'], [70, 'creakOpen', 5],
   [74, 'swarm'], [82, 'haunt', 10], [96, 'pumpkin', 1],
 ];
 const SCHEDULE = (DEMO ? DEMO_TIMELINE : TIMELINE).filter(e => e[0] < CYCLE).sort((a, b) => a[0] - b[0]);
@@ -595,7 +627,8 @@ function frame() {
     if (ct >= CYCLE) { cycleStart = T; ct = 0; nextIdx = 0; if (doorOpen < 1) setDoor(1); }
     while (nextIdx < SCHEDULE.length && SCHEDULE[nextIdx][0] <= ct) { const [, n, ...a] = SCHEDULE[nextIdx++]; trigger(n, ...a); }
     if (hudOn) { const nx = SCHEDULE[nextIdx]; hud.hidden = false; hud.textContent = `Halloween cycle ${fmt(ct)} / ${fmt(CYCLE)}${nx ? `   next: ${nx[1]} in ${Math.ceil(nx[0] - ct)} s` : ''}${muted ? '   (muted)' : ''}${AC && AC.state !== 'running' ? '   (sound blocked by the browser: click or press a key)' : ''}`; }
-  } else if (hudOn && started) { hud.hidden = false; hud.textContent = `Auto off: keys 1–9, 0, F, J, C${muted ? '   (muted)' : ''}`; }
+  } else if (hudOn && started) { hud.hidden = false; hud.textContent = `Auto off: keys 1–9, 0, F, J, C, R${muted ? '   (muted)' : ''}`; }
+  if (started && chair && T > nextRock) { nextRock = T + R(25, 50); if (![...active].some(f => f.isRock)) FX.rock(R(5, 9)); }   // every so often, by itself
   for (const fx of [...active]) { if (fx.update(T - fx.t0) === false) active.delete(fx); }
   // the bulb: ease towards its target level, plus a faint hum wobble
   U.lightMix.value += (lightTarget - U.lightMix.value) * 0.35;
@@ -636,7 +669,7 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   const map = { '1': () => FX.pumpkin(), '2': () => FX.spider(), '3': () => FX.ghost(), '4': () => (doorOpen > 0.5 ? FX.slam() : FX.creakOpen(4)),
     '5': () => FX.lightning({ figure: 'near', near: 1 }), '6': () => FX.groan(0.8, 2), '7': () => FX.blackout(4), '8': () => FX.swarm(), '9': () => FX.bats(),
-    '0': () => FX.whisper(), 'f': () => FX.flicker(4), 'j': () => FX.floorMonster(6), 'c': () => FX.haunt(10), 'k': () => FX.knock(), 'a': () => { auto = !auto; cycleStart = performance.now() / 1000; nextIdx = 0; },
+    '0': () => FX.whisper(), 'f': () => FX.flicker(4), 'j': () => FX.floorMonster(6), 'c': () => FX.haunt(10), 'r': () => FX.rock(7), 'k': () => FX.knock(), 'a': () => { auto = !auto; cycleStart = performance.now() / 1000; nextIdx = 0; },
     'm': () => { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.9; }, 'h': () => { hudOn = !hudOn; hud.hidden = !hudOn; } };
   map[k]?.();
 });
@@ -645,7 +678,7 @@ if (P.get('autostart') !== '0') start();
 // if the browser holds the sound back until someone interacts, keep asking, and take any click, tap or key anywhere
 setInterval(() => { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); }, 1500);
 for (const ev of ['pointerdown', 'touchstart', 'mousedown']) addEventListener(ev, () => { if (!started) start(); else { initAudio(); AC?.resume(); } }, { passive: true });
-window.__halloween = { FX, setDoor, U, scene, cubeCam, cubeRT, room, EYE, THREE };                    // for testing
+window.__halloween = { chair, FX, setDoor, U, scene, cubeCam, cubeRT, room, EYE, THREE };                    // for testing
 requestAnimationFrame(frame);
 </script>
 </body>

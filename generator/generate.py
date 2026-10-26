@@ -1490,6 +1490,8 @@ for i, dc in enumerate(SPEC.get("decals", []) or []):
 
 # ============================================================== items
 for it in SPEC.get("items", []):
+    if it.get("live"):                 # drawn live by a scene page (e.g. a rocking chair in the Halloween room): not in the render
+        USED.add(it["model"]); continue
     try:
         place_model(it["model"], Vector((float(it.get("x", 0)), float(it.get("y", 0)), float(it.get("z", 0)))),
                     math.radians(float(it.get("rot", 0))), float(it.get("scale", 1.0)))
