@@ -111,6 +111,8 @@ A room is one JSON file (see `examples/glenda_modern.json`). Metres; origin at t
 floor; x = east, y = north. A feature's `pos` is its centre along its wall (x for north/south walls, y for east/west).
 Item `rot` is in degrees: 0 faces south (into the room from the north wall), 180 north, 90 east, -90 west.
 View `yaw` is a compass bearing for the centre of the panorama (0 = north).
+The builder shows the walls as **Front** (north), **Right** (east), **Back** (south) and **Left** (west), named from the
+room centre facing the middle of the 360 image; the spec files keep north/east/south/west.
 
 Render one from the command line without the server:
 

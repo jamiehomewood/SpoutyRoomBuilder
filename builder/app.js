@@ -34,6 +34,9 @@ const fmtTime = s => { s = Math.max(0, Math.round(s)); if (s < 90) return `${s} 
 
 const QUAL = { draft: '2048 × 1024, quick check', standard: '6144 × 3072, the Igloo standard', high: '8192 × 4096, slow' };
 const WALLNAMES = ['north', 'east', 'south', 'west'];
+// what people see: walls are named from the room centre facing the front (the middle of the 360 image). Specs keep north/east/south/west.
+const WALL_LABEL = { north: 'Front', east: 'Right', south: 'Back', west: 'Left' };
+const wl = w => WALL_LABEL[w] || w;
 const FEATURE_LABEL = { alcove: 'Alcove', door: 'Door', window: 'Window', arch: 'Arch', kitchenette: 'Kitchenette' };
 
 let presets = [];
@@ -223,12 +226,25 @@ function lineLoop(pts, color, z = 0.01, dashed = false) {
   const m = dashed ? new THREE.LineDashedMaterial({ color, dashSize: 0.15, gapSize: 0.1, depthTest: false }) : new THREE.LineBasicMaterial({ color, depthTest: false });
   const l = new THREE.LineLoop(g, m); if (dashed) l.computeLineDistances(); l.renderOrder = 10; return l;
 }
+const labelMats = new Map();
+function wallLabelMat(text) {
+  if (labelMats.has(text)) return labelMats.get(text);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d');
+  x.font = 'bold 34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#9cc7ee'; x.fillText(text, 128, 34);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }); labelMats.set(text, m); return m;
+}
 function drawOverlay() {
   overlay.clear();
   if (!spec) return;
   const F = roomFrame(spec);
   // physical room outline, and the projected floor
   overlay.add(lineLoop([[F.X0, F.Y0], [F.X1, F.Y0], [F.X1, F.Y1], [F.X0, F.Y1]], 0x5aa2e0, 0.012, true));
+  // wall names (front = the middle of the 360 image), just outside each wall
+  for (const [w, x, y] of [['north', 0, F.Y1 + 0.35], ['south', 0, F.Y0 - 0.35], ['east', F.X1 + 0.35, 0], ['west', F.X0 - 0.35, 0]]) {
+    const sp = new THREE.Sprite(wallLabelMat(wl(w).toUpperCase())); sp.scale.set(1.3, 0.325, 1);
+    sp.position.copy(b2t(x, y, 0.05)); sp.renderOrder = 6; overlay.add(sp);
+  }
   if ($('#chkFloor').checked && spec.room.projected?.floor !== false) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(F.W, F.D).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0x5aa2e0, transparent: true, opacity: 0.13, depthWrite: false }));
@@ -294,7 +310,7 @@ function featureProblems(f) {
 }
 function allWarnings() {
   const out = [];
-  for (const f of spec.features) for (const p of featureProblems(f)) out.push({ text: `${FEATURE_LABEL[f.type]} (${f.wall}): ${p}`, sel: { kind: 'feature', id: f.id } });
+  for (const f of spec.features) for (const p of featureProblems(f)) out.push({ text: `${FEATURE_LABEL[f.type]} (${wl(f.wall).toLowerCase()} wall): ${p}`, sel: { kind: 'feature', id: f.id } });
   (spec.decals || []).forEach((dc, i) => {                // a wall decal hanging over a doorway, window, arch or alcove opening
     if (dc.surface === 'floor' || String(dc.surface).startsWith('alcove:')) return;
     const P = decalPlacement(spec, dc); if (!P) return;
@@ -632,7 +648,7 @@ function tabRoom(body) {
     el('h3', {}, 'The physical room'),
     el('p', { class: 'note' }, 'Start from the room the scenario will run in, so the walls of the render line up with the real walls. Pick a measured room or type in your own size.'),
     row('Room', presetSel),
-    dim('Width (W–E)', 'width', 2, 20), dim('Depth (S–N)', 'depth', 2, 20), dim('Height', 'height', 1.8, 6), dim('Eye height', 'eye', 0.8, 2.0),
+    dim('Width (left–right)', 'width', 2, 20), dim('Depth (back–front)', 'depth', 2, 20), dim('Height', 'height', 1.8, 6), dim('Eye height', 'eye', 0.8, 2.0),
     row('Projected on', el('label', { class: 'chk', style: 'background:none;border:0;padding:0' },
       el('input', { type: 'checkbox', checked: r.projected?.floor !== false, onchange: e => { r.projected = { ...(r.projected || {}), floor: e.target.checked }; changed({ rebuild: false }); } }), 'Floor'),
       el('label', { class: 'chk', style: 'background:none;border:0;padding:0' },
@@ -872,15 +888,15 @@ function tabWalls(body) {
   // a feature wall: any wall can have its own finish (alcoves on it follow unless they have their own)
   spec.wall_finishes ||= {};
   const wfBox = el('details', { class: 'card', open: Object.keys(spec.wall_finishes).length > 0 }, el('summary', {}, el('b', {}, 'Wall finishes'),
-    el('span', { class: 'note' }, Object.keys(spec.wall_finishes).length ? '  ' + Object.keys(spec.wall_finishes).join(', ') + ' wall' + (Object.keys(spec.wall_finishes).length > 1 ? 's have' : ' has') + ' their own' : '  all walls as the room')));
+    el('span', { class: 'note' }, Object.keys(spec.wall_finishes).length ? '  ' + Object.keys(spec.wall_finishes).map(wl).join(', ') + ' wall' + (Object.keys(spec.wall_finishes).length > 1 ? 's have' : ' has') + ' their own' : '  all walls as the room')));
   for (const wall of WALLNAMES) {
-    wfBox.append(el('h4', {}, `${wall} wall`), overrideEditor(spec.wall_finishes, wall,
+    wfBox.append(el('h4', {}, `${wl(wall)} wall`), overrideEditor(spec.wall_finishes, wall,
       () => [spec.finishes?.walls || {}, spec.finishes?.lower || { type: 'none' }], 'Same as the room', () => changed({ structural: true })));
   }
   body.append(wfBox);
   for (const wall of WALLNAMES) {
     const fs = spec.features.filter(f => f.wall === wall); if (!fs.length) continue;
-    body.append(el('h4', {}, `${wall} wall · ${r2(wallLen(wall))} m`));
+    body.append(el('h4', {}, `${wl(wall)} wall · ${r2(wallLen(wall))} m`));
     for (const f of fs) {
       const probs = featureProblems(f);
       const card = el('div', { class: 'card' + (sel?.kind === 'feature' && sel.id === f.id ? ' sel' : '') + (probs.length ? ' err' : ''), onclick: e => { if (e.target.closest('select, button, input, label, textarea')) return;   // controls work without redrawing the card
@@ -893,7 +909,7 @@ function tabWalls(body) {
         : row(label, ...slider(obj[key], min, max, step, v => { obj[key] = v; live(); }, v => { obj[key] = v; commit(); }));
       card.append(
         el('div', { class: 'head' }, el('b', {}, FEATURE_LABEL[f.type]),
-          el('select', { onchange: e => { f.wall = e.target.value; commit(); } }, WALLNAMES.map(w => el('option', { value: w, selected: w === f.wall }, w))),
+          el('select', { onchange: e => { f.wall = e.target.value; commit(); } }, WALLNAMES.map(w => el('option', { value: w, selected: w === f.wall }, wl(w)))),
           el('button', { class: 'danger', title: 'Remove', onclick: () => { spec.features = spec.features.filter(x => x !== f); sel = null; commit(); } }, '✕')),
         adv ? row('From left corner', numIn(r2(leftDist(f)), 0.01, v => { setLeftDist(f, v); commit(); }), el('span', { class: 'note' }, 'm to centre'))
             : row('From left corner', ...slider(r2(leftDist(f)), 0, L, 0.05, v => { setLeftDist(f, v); live(); }, v => { setLeftDist(f, v); commit(); })),
@@ -967,8 +983,8 @@ function tabModels(body) {
 // ---------------------------------------------------------------- decals
 const DECAL_CATS = { drawing: 'Drawings', graffiti: 'Graffiti', poster: 'Posters', sign: 'Signs', damage: 'Damage', uploaded: 'Your images' };
 function decalSurfaces() {
-  const out = WALLNAMES.map(w => [w, `${w[0].toUpperCase()}${w.slice(1)} wall`]);
-  for (const f of spec.features) if (f.type === 'alcove' || f.type === 'kitchenette') out.push(['alcove:' + f.id, `Back of ${f.type} "${f.id}" (${f.wall})`]);
+  const out = WALLNAMES.map(w => [w, `${wl(w)} wall`]);
+  for (const f of spec.features) if (f.type === 'alcove' || f.type === 'kitchenette') out.push(['alcove:' + f.id, `Back of ${f.type} "${f.id}" (${wl(f.wall).toLowerCase()} wall)`]);
   out.push(['floor', 'Floor']);
   return out;
 }
@@ -1001,7 +1017,7 @@ function decalEditor(i) {
       el('button', { onclick: () => { placingDecal = i; canvas.style.cursor = 'crosshair'; toast('Click where it goes: a wall, an alcove or the floor.', false, 5000); } }, 'Place by clicking'),
       el('span', { class: 'note' }, ' in 3D or Eye view')),
     dc.surface === 'floor'
-      ? [sl('Across (W–E)', 'x', F.X0, F.X1, 0.01, x => `${(+x).toFixed(2)} m`), sl('Along (S–N)', 'y', F.Y0, F.Y1, 0.01, x => `${(+x).toFixed(2)} m`)]
+      ? [sl('Across (left–right)', 'x', F.X0, F.X1, 0.01, x => `${(+x).toFixed(2)} m`), sl('Along (back–front)', 'y', F.Y0, F.Y1, 0.01, x => `${(+x).toFixed(2)} m`)]
       : [sl('Along the wall', 'u', along[0], along[1], 0.01, x => `${(+x).toFixed(2)} m`), sl('Height (centre)', 'z', 0.05, F.RH - 0.05, 0.01, x => `${(+x).toFixed(2)} m`)],
     sl('Width', 'width', 0.05, 4, 0.01, x => `${(+x).toFixed(2)} m × ${(+x * (+meta.aspect || 1)).toFixed(2)} m`),
     sl('Turn', 'rot', -180, 180, 1, x => `${Math.round(x)}°`),
@@ -1186,7 +1202,7 @@ function tabViews(body) {
         el('button', { onclick: () => { eye.view = i; setCamMode('eye'); } }, 'Look'),
         i > 0 ? el('button', { class: 'danger', onclick: () => { spec.views.splice(i, 1); sel = null; changed({ structural: true, rebuild: false }); } }, '✕') : null),
       row('Faces', ...slider(+v.yaw || 0, -180, 180, 5, val => { v.yaw = val; drawOverlay(); }, val => { v.yaw = val; changed({ rebuild: false }); }, x => {
-        const d = ((+x % 360) + 360) % 360; return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(d / 45) % 8] + ` ${Math.round(+x)}°`; })),
+        const d = ((+x % 360) + 360) % 360; return ['Front', 'Front-right', 'Right', 'Back-right', 'Back', 'Back-left', 'Left', 'Front-left'][Math.round(d / 45) % 8] + ` ${Math.round(+x)}°`; })),
       mode === 'advanced' ? row('Position', el('span', { class: 'note' }, 'x'), numIn(v.x, 0.05, val => { v.x = val; changed({ rebuild: false, structural: true }); }), el('span', { class: 'note' }, 'y'), numIn(v.y, 0.05, val => { v.y = val; changed({ rebuild: false, structural: true }); })) : null,
     );
     body.append(c);
