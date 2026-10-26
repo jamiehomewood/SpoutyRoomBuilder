@@ -1593,6 +1593,8 @@ try:
         except Exception: continue
 except Exception as e:
     log("no GPU, using CPU", e)
+if sc.cycles.device != "GPU":
+    log("render device CPU (no supported GPU found: renders will be much slower)")
 sc.cycles.samples = SAMPLES
 sc.cycles.use_denoising = True
 sc.cycles.use_adaptive_sampling = True

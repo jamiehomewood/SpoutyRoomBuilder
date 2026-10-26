@@ -412,8 +412,14 @@ def run_job(job):
             with qlock:
                 if job["status"] != "rendering": continue
                 job["progress"] = max(job["progress"], round(0.06 + 0.94 * frac, 4))
-                left_this = max(0.0, expect_view - (time.time() - vstate["start"]))
-                job["eta"] = max(1, left_this + (n_views - vstate["i"] - 1) * expect_view)
+                over = time.time() - vstate["start"] - expect_view
+                if over > 5:                  # slower than this PC's estimate: say so rather than sitting on "1 s left"
+                    job["eta"] = None
+                    job["message"] = (f"Rendering view {vstate['i'] + 1} of {n_views} \u00b7 still going, "
+                                      f"{int((time.time() - vstate['start']) // 60)} min so far (slower than the estimate)")
+                else:
+                    left_this = max(0.0, expect_view - (time.time() - vstate["start"]))
+                    job["eta"] = max(1, left_this + (n_views - vstate["i"] - 1) * expect_view)
     threading.Thread(target=ticker, daemon=True).start()
     for line in proc.stdout:
         logf.write(line)
@@ -426,7 +432,7 @@ def run_job(job):
             el = time.time() - t0
             with qlock:
                 job["progress"] = max(job["progress"], round(0.06 + 0.94 * frac, 4))
-                job["message"] = f"Rendering view {i + 1} of {n}"
+                if "still going" not in job.get("message", ""): job["message"] = f"Rendering view {i + 1} of {n}"
         elif line.startswith("RB_VIEW_DONE"):
             view_times.append(time.time())
         elif line.startswith("RB_LOG"):
