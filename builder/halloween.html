@@ -25,7 +25,7 @@ canvas { width: 100vw; height: 100vh; display: block; }
 // Halloween scare layer for a Room Builder render, shown as one equirectangular 360 image (give it to Spouty at
 // 4096 x 2048, or an Igloo web layer set to 360 / equirectangular).
 //   ?lit=<library id of the lights-on render>&dark=<library id of the lights-off render>&view=centre
-//   &auto=1 (default) runs the 8-minute cycle, &cycle=<seconds>, &hud=0 hides the status box, &autostart=1 skips the click, &demo=1 plays every scare in under 2 minutes, &look=1 shows a flat camera view that turns to each scare
+//   &auto=1 (default) runs the 8-minute cycle, &cycle=<seconds>, &hud=0 hides the status box, &autostart=0 shows a click-to-start screen (it starts by itself otherwise), &demo=1 plays every scare in under 2 minutes, &look=1 shows a flat camera view that turns to each scare
 // Lights flicker and black out by cross-fading the two renders; lightning, the pumpkin flare and room shake are applied on
 // top; doors, spiders, the pumpkin face, the ghost, bats and the figure outside are 3D objects rendered from the eye point,
 // hidden behind an invisible copy of the room's walls so they only show where they should (e.g. the figure through the window).
@@ -578,7 +578,7 @@ function frame() {
     let ct = T - cycleStart;
     if (ct >= CYCLE) { cycleStart = T; ct = 0; nextIdx = 0; if (doorOpen < 1) setDoor(1); }
     while (nextIdx < SCHEDULE.length && SCHEDULE[nextIdx][0] <= ct) { const [, n, ...a] = SCHEDULE[nextIdx++]; trigger(n, ...a); }
-    if (hudOn) { const nx = SCHEDULE[nextIdx]; hud.hidden = false; hud.textContent = `Halloween cycle ${fmt(ct)} / ${fmt(CYCLE)}${nx ? `   next: ${nx[1]} in ${Math.ceil(nx[0] - ct)} s` : ''}${muted ? '   (muted)' : ''}`; }
+    if (hudOn) { const nx = SCHEDULE[nextIdx]; hud.hidden = false; hud.textContent = `Halloween cycle ${fmt(ct)} / ${fmt(CYCLE)}${nx ? `   next: ${nx[1]} in ${Math.ceil(nx[0] - ct)} s` : ''}${muted ? '   (muted)' : ''}${AC && AC.state !== 'running' ? '   (sound blocked by the browser: click or press a key)' : ''}`; }
   } else if (hudOn && started) { hud.hidden = false; hud.textContent = `Auto off: keys 1–9, 0, F, J, C${muted ? '   (muted)' : ''}`; }
   for (const fx of [...active]) { if (fx.update(T - fx.t0) === false) active.delete(fx); }
   // the bulb: ease towards its target level, plus a faint hum wobble
@@ -624,7 +624,11 @@ addEventListener('keydown', e => {
     'm': () => { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.9; }, 'h': () => { hudOn = !hudOn; hud.hidden = !hudOn; } };
   map[k]?.();
 });
-if (P.get('autostart') === '1') { start(); }
+// starts by itself (in the room nobody can click it); &autostart=0 brings back the click-to-start screen
+if (P.get('autostart') !== '0') start();
+// if the browser holds the sound back until someone interacts, keep asking, and take any click, tap or key anywhere
+setInterval(() => { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); }, 1500);
+for (const ev of ['pointerdown', 'touchstart', 'mousedown']) addEventListener(ev, () => { if (!started) start(); else { initAudio(); AC?.resume(); } }, { passive: true });
 window.__halloween = { FX, setDoor, U, scene, cubeCam, cubeRT, room, EYE, THREE };                    // for testing
 requestAnimationFrame(frame);
 </script>

@@ -63,9 +63,10 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
    (the "Raw" link), or open it as a copy to make a variant.
 
 **Haunted room (scare layer):** render a room twice, once with the lights on and once with `"lights_on": false` (see
-`examples/halloween_flat.json` and `halloween_flat_dark.json`), then give Spouty
-`http://localhost:8030/builder/halloween.html?lit=<library id>&dark=<library id>`. Click or press a key once to start the
-sound (browsers block audio until then). It plays an 8-minute loop of flickers, blackouts, lightning (with a figure at the
+`examples/halloween_flat.json` and `halloween_flat_dark.json`), then give Spouty (or an ICE web layer in
+the room) `http://localhost:8030/builder/halloween.html?lit=<library id>&dark=<library id>`. It starts by itself. If a
+browser holds the sound back, any click or key press starts it (in Spouty and ICE it plays straight away);
+`&autostart=0` brings back a click-to-start screen. It plays an 8-minute loop of flickers, blackouts, lightning (with a figure at the
 window), creaks, groans, door slams, footsteps, whispers, a lunging pumpkin, spiders, bats, a ghost, and a hole that opens in
 the floor with something in it when the lights go out. Keys: 1 pumpkin, 2 spider, 3 ghost, 4 door, 5 lightning, 6 groan,
 7 blackout, 8 swarm, 9 bats, 0 whisper, F flicker, J floor hole, C haunting (shakes, light turns green / red / violet /
