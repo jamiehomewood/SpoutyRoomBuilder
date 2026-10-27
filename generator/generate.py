@@ -123,6 +123,25 @@ WALLS = {
     "west":  dict(axis="y", line=X0, sign=-1, lo=Y0, hi=Y1),
 }
 
+def wbase(wall):
+    """The real wall a (possibly virtual) wall frame belongs to: 'north@alcove1' -> 'north'."""
+    return WALLS[wall].get("base", wall)
+
+def virtual_wall(wall, d, key):
+    """A wall frame parallel to 'wall' but d metres further out (the back of an alcove, the far wall of a side room)."""
+    f = WALLS[wall]
+    WALLS[key] = dict(f, line=f["line"] + f["sign"] * d, base=wbase(wall))
+    return key
+
+def spans_without(a, b, holes):
+    """Pieces of a..b left after cutting out the (u0, u1) holes."""
+    out, cur = [], a
+    for h0, h1 in sorted(holes):
+        if h0 > cur: out.append((cur, min(h0, b)))
+        cur = max(cur, h1)
+    if cur < b: out.append((cur, b))
+    return [(x, y) for x, y in out if y - x > 0.005]
+
 def w2world(wall, u, d, z=0.0):
     f = WALLS[wall]
     if f["axis"] == "x": return Vector((u, f["line"] + f["sign"] * d, z))
@@ -135,7 +154,7 @@ def wbox_world(wall, u0, u1, d0, d1, z0, z1):
 
 def facing(wall):
     """Rotation (radians about z) that turns something whose front faces -Y so it faces into the room from this wall."""
-    return {"north": 0.0, "south": math.pi, "east": -math.pi / 2, "west": math.pi / 2}[wall]
+    return {"north": 0.0, "south": math.pi, "east": -math.pi / 2, "west": math.pi / 2}[wbase(wall)]
 
 # ============================================================== materials
 def principled(name):
@@ -1072,7 +1091,11 @@ def recess(ft, wall, depth, h, name, floor_m=None, lower=True):
     mlo, mhi = corner_mate(ft, "lo"), corner_mate(ft, "hi")     # recesses meeting this one in a corner
     dlo, dhi = (fdepth(mlo) if mlo else 0.0), (fdepth(mhi) if mhi else 0.0)
     amat, almat, alfin = alcove_set(ft)
-    wbox(f"{name}_back", wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, amat)
+    holes = [(*feature_span(dd), min(float(dd.get("height", 2.0)), h - 0.05)) for dd in (ft.get("doors") or [])]
+    for a, b in spans_without(u0 - T - dlo, u1 + T + dhi, [(h0, h1) for h0, h1, _ in holes]):
+        wbox(f"{name}_back", wall, a, b, depth, depth + T, 0, RH, amat)
+    for k, (h0, h1, dh) in enumerate(holes):                  # wall over each door
+        wbox(f"{name}_back_over{k}", wall, h0, h1, depth, depth + T, dh, RH, amat)
     if not mlo: wbox(f"{name}_side_a", wall, u0 - T, u0, T * 0, depth + T, 0, RH, amat)
     if not mhi: wbox(f"{name}_side_b", wall, u1, u1 + T, T * 0, depth + T, 0, RH, amat)
     mn, mx = wbox_world(wall, u0, u1, T / 2, depth, 0, 0)
@@ -1084,14 +1107,16 @@ def recess(ft, wall, depth, h, name, floor_m=None, lower=True):
     # wrap=True starts the side pieces in front of the wall line so they wrap the outside corner of the opening.
     full = h >= RH - 0.01; top = RH if full else h
     def trim_round(tag, t, z0, z1, m, wrap=True):
-        wbox(f"{name}_{tag}_back", wall, u0 - dlo, u1 + dhi, depth - t, depth, z0, z1, m)
+        for a, b in (spans_without(u0 - dlo, u1 + dhi, [(h0, h1) for h0, h1, dh in holes if z0 < dh]) if holes else [(u0 - dlo, u1 + dhi)]):
+            wbox(f"{name}_{tag}_back", wall, a, b, depth - t, depth, z0, z1, m)
         d0 = -t if wrap else 0.0
         if not mlo: wbox(f"{name}_{tag}_a", wall, u0, u0 + t, d0, depth, z0, z1, m)
         if not mhi: wbox(f"{name}_{tag}_b", wall, u1 - t, u1, d0, depth, z0, z1, m)
     trim_round("skirt", 0.018, 0, 0.12, MAT["trim"])
     trim_round("cornice", 0.05, top - 0.05, top, MAT["trim"], wrap=full)
     if lower and alfin:                              # the lower-wall finish carries on round the inside too
-        lower_along(f"{name}_lower_back", wall, u0 - dlo, u1 + dhi, depth, almat, alfin)
+        for a, b in spans_without(u0 - dlo, u1 + dhi, [(h0, h1) for h0, h1, _ in holes]):
+            lower_along(f"{name}_lower_back", wall, a, b, depth, almat, alfin)
         if not mlo: lower_side(f"{name}_lower_a", wall, u0, +1, -0.02, depth, almat, alfin)
         if not mhi: lower_side(f"{name}_lower_b", wall, u1, -1, -0.02, depth, almat, alfin)
     if depth > 1.2:                                 # deep bays need their own light
@@ -1235,7 +1260,7 @@ def window(ft, wall):
         p.data.size, p.data.size_y = (u1 - u0), h
         # area lights face -Z: turn it to face into the room
         p.rotation_euler = {"north": (-math.pi / 2, 0, 0), "south": (math.pi / 2, 0, 0),
-                            "east": (0, math.pi / 2, 0), "west": (0, -math.pi / 2, 0)}[wall]
+                            "east": (0, math.pi / 2, 0), "west": (0, -math.pi / 2, 0)}[wbase(wall)]
         try: p.data.cycles.is_portal = True
         except Exception: pass
         put(p)
@@ -1382,8 +1407,10 @@ def door(ft, wall):
         wbox(f"{fid}_arch_{nm}", wall, a, b, -0.02, 0, z0, z1, MAT["trim"])
     # lining in the reveal
     wbox(f"{fid}_lining_t", wall, u0, u1, 0, T, h - 0.02, h, MAT["trim"])
-    if beyond in ("hall", "corridor", "dark", "outside"):
-        if beyond != "outside":
+    if beyond in ("hall", "corridor", "dark", "outside", "room"):
+        if beyond == "room":
+            side_room(ft, wall, u0, u1, fid)
+        elif beyond != "outside":
             corridor(ft, wall, u0, u1, h, fid, lit=beyond != "dark")
         else:
             wbox(f"{fid}_step", wall, u0 - 0.05, u1 + 0.05, T, T + 0.35, -0.12, -0.005, flat("Doorstep_stone", (0.5, 0.5, 0.48), 0.8))
@@ -1392,8 +1419,8 @@ def door(ft, wall):
         hinge = w2world(wall, u1, T, 0)
         leaf = box_obj(f"{fid}_leaf", Vector((-leaf_w, -0.04, 0)), Vector((0, 0.0, h - 0.01)), MAT["door"])
         ang = math.radians(78)
-        closed = {"north": 0.0, "south": 0.0, "east": math.pi / 2, "west": math.pi / 2}[wall]   # local -x runs towards u0
-        swing = {"north": -ang, "south": ang, "east": ang, "west": -ang}[wall]                 # free end moves outward
+        closed = {"north": 0.0, "south": 0.0, "east": math.pi / 2, "west": math.pi / 2}[wbase(wall)]   # local -x runs towards u0
+        swing = {"north": -ang, "south": ang, "east": ang, "west": -ang}[wbase(wall)]                 # free end moves outward
         leaf.matrix_world = Matrix.Translation(hinge) @ Matrix.Rotation(closed + swing, 4, "Z")
         if HOSPITAL:                               # vision panel in the leaf
             bpy.context.view_layer.update()
@@ -1418,6 +1445,37 @@ def door(ft, wall):
         wbox(f"{fid}_leaf", wall, u0 + 0.003, u1 - 0.003, T * 0.35, T * 0.35 + 0.04, 0.01, h - 0.005, MAT["door"])
         k = w2world(wall, u0 + 0.08, T * 0.35 - 0.03, 1.0)
         cylinder_obj(f"{fid}_handle", 0.02, 0.06, k, MAT["steel"], rot=(math.pi / 2, 0, 0) if WALLS[wall]["axis"] == "x" else (0, math.pi / 2, 0))
+
+def side_room(ft, wall, u0, u1, fid):
+    """Another room through the door: lit, decorated like this one, with an optional window on its far wall."""
+    rm = ft.get("room") or {}
+    rw, rd = max(u1 - u0 + 0.4, float(rm.get("width", 3.0))), max(1.0, float(rm.get("depth", 3.0)))
+    rp = float(rm.get("pos", (u0 + u1) / 2))
+    ru0, ru1 = min(u0 - 0.2, rp - rw / 2), max(u1 + 0.2, rp + rw / 2)
+    back = T + rd
+    wm = MAT["wall"]
+    wbox(f"{fid}_room_back", wall, ru0 - T, ru1 + T, back, back + T, 0, RH, wm) if not rm.get("window") else None
+    wbox(f"{fid}_room_a", wall, ru0 - T, ru0, T, back + T, 0, RH, wm)
+    wbox(f"{fid}_room_b", wall, ru1, ru1 + T, T, back + T, 0, RH, wm)
+    # the wall the door is in, seen from the other side, between the two side walls
+    for a, b in spans_without(ru0, ru1, [(u0, u1)]):
+        wbox(f"{fid}_room_front", wall, a, b, T, T + 0.02, 0, RH, wm)
+    mn, mx = wbox_world(wall, ru0, ru1, T / 2, back, 0, 0)
+    zones.append((f"{fid}_room", mn, mx, MAT["floor"], RH))
+    for nm, (a, b, d0, d1) in {"back": (ru0, ru1, back - 0.018, back), "a": (ru0, ru0 + 0.018, T, back), "b": (ru1 - 0.018, ru1, T, back)}.items():
+        wbox(f"{fid}_room_skirt_{nm}", wall, a, b, d0, d1, 0, 0.12, MAT["trim"])
+    if rm.get("window"):                               # far wall with a window looking outside
+        far = virtual_wall(wall, back, f"{wall}@{fid}_far")
+        ww = min(1.6, rw - 0.8); wp = (ru0 + ru1) / 2
+        for a, b in spans_without(ru0 - T, ru1 + T, [(wp - ww / 2, wp + ww / 2)]):
+            wbox(f"{fid}_room_back", far, a, b, 0, T, 0, RH, wm)
+        wbox(f"{fid}_room_back_under", far, wp - ww / 2, wp + ww / 2, 0, T, 0, 0.85, wm)
+        wbox(f"{fid}_room_back_over", far, wp - ww / 2, wp + ww / 2, 0, T, 0.85 + 1.25, RH, wm)
+        window({"id": f"{fid}_room_window", "pos": wp, "width": ww, "sill": 0.85, "height": 1.25, "dressing": rm.get("dressing", "curtains")}, far)
+    lc = w2world(wall, (ru0 + ru1) / 2, T + rd / 2, RH - 0.04)
+    bpy.ops.object.light_add(type="AREA", location=lc)
+    l = bpy.context.active_object; l.name = f"{fid}_room_light"; l.data.shape = "DISK"; l.data.size = 0.5
+    l.data.energy = 0 if rm.get("lit") is False else 70 * max(1.0, rw * rd / 9); l.data.color = (1.0, 0.92, 0.8); put(l)
 
 def arch(ft, wall):
     u0, u1 = feature_span(ft)
@@ -1508,6 +1566,12 @@ for ft in FEATURES:
             depth = float(ft.get("depth", 0.6)); h = min(float(ft.get("height", RH)), RH)
             recess(ft, wall, depth, h, ft.get("id", "alcove"))
             if ft.get("shelves"): shelves(ft, wall, depth, int(ft["shelves"]))
+            for k, dd in enumerate(ft.get("doors") or []):       # doors in the back of the alcove, to a corridor or another room
+                vw = virtual_wall(wall, depth, f"{wall}@{ft.get('id', 'alcove')}")
+                a0, a1 = feature_span(ft); WALLS[vw].update(lo=max(WALLS[wall]["lo"], a0 - 1.2), hi=min(WALLS[wall]["hi"], a1 + 1.2))
+                door(dict(dd, id=f"{ft.get('id', 'alcove')}_door{k}", type="door", wall=vw), vw)
+                d0_, d1_ = feature_span(dd); mn, mx = wbox_world(vw, d0_, d1_, -0.01, T / 2 + 0.01, 0, 0)   # floor through the doorway
+                zones.append((f"{ft.get('id', 'alcove')}_door{k}_sill", mn, mx, MAT["floor"], min(float(dd.get("height", 2.0)), RH)))
         elif typ == "kitchenette":
             depth = float(ft.get("depth", 0.65))
             u0, u1 = recess(ft, wall, depth, RH, ft.get("id", "kitchenette"), floor_m=MAT["k_floor"], lower=False)
@@ -1530,7 +1594,11 @@ for ft in FEATURES:
 
 # a black shell round everything so no daylight leaks through gaps (open where windows look out)
 G = 3.0
-win_walls = {ft["wall"] for ft in FEATURES if ft.get("wall") in WALLS and (ft.get("type") == "window" or (ft.get("type") == "door" and ft.get("beyond") == "outside"))}
+win_walls = {ft["wall"] for ft in FEATURES if ft.get("wall") in WALLS and (ft.get("type") == "window" or (ft.get("type") == "door" and ft.get("beyond") == "outside")
+                                                                 or (ft.get("type") == "door" and ft.get("beyond") == "room" and (ft.get("room") or {}).get("window")))}
+for ft in FEATURES:                                  # doors at the back of alcoves that open outside or into a room with a window
+    for dd in ft.get("doors") or []:
+        if ft.get("wall") in WALLS and (dd.get("beyond") == "outside" or (dd.get("beyond") == "room" and (dd.get("room") or {}).get("window"))): win_walls.add(ft["wall"])
 shell_m = flat("Shell_black", (0, 0, 0), 1.0)
 ext = 9.0
 sides = {"west": (X0 - ext - 0.3, Y0 - ext, X0 - ext, Y1 + ext), "east": (X1 + ext, Y0 - ext, X1 + ext + 0.3, Y1 + ext),

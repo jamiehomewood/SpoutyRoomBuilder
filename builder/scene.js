@@ -442,17 +442,30 @@ export function buildRoom(spec, opts = {}) {
     for (const [a, b] of cruns) if (b - a > 0.02) wb(wall, a, b, -0.05, 0, RH - 0.05, RH, M.trim);
   }
 
+  // pieces of a..b left after cutting out holes [[u0, u1], ...]
+  const without = (a, b, holes) => {
+    const out = []; let cur = a;
+    for (const [h0, h1] of [...holes].sort((x, y) => x[0] - y[0])) { if (h0 > cur) out.push([cur, Math.min(h0, b)]); cur = Math.max(cur, h1); }
+    if (cur < b) out.push([cur, b]);
+    return out.filter(([x, y]) => y - x > 0.005);
+  };
+  // a wall frame parallel to a real wall but further out (the back of an alcove, the far wall of a room behind a door)
+  const virtualWall = (wall, d, key) => { const f = walls[wall]; walls[key] = { ...f, line: f.line + f.sign * d, base: f.base || wall }; return key; };
+  const baseOf = w => walls[w]?.base || w;
+
   const recess = (ft, wall, depth, h, floorMat) => {
     const [u0, u1] = span(ft);
     const mlo = cornerMate(ft, 'lo'), mhi = cornerMate(ft, 'hi');
     const dlo = mlo ? fdepth(mlo) : 0, dhi = mhi ? fdepth(mhi) : 0;
     const AS = M.alcoveSet(ft);
-    wb(wall, u0 - T - dlo, u1 + T + dhi, depth, depth + T, 0, RH, AS.wall, ft.id);
+    const holes = (ft.doors || []).map(dd => [...span(dd), Math.min(+(dd.height ?? 2.0), h - 0.05)]);
+    for (const [a, b] of without(u0 - T - dlo, u1 + T + dhi, holes)) wb(wall, a, b, depth, depth + T, 0, RH, AS.wall, ft.id);
+    for (const [h0, h1, dh] of holes) wb(wall, h0, h1, depth, depth + T, dh, RH, AS.wall, ft.id);
     if (!mlo) wb(wall, u0 - T, u0, 0, depth + T, 0, RH, AS.wall, ft.id);
     if (!mhi) wb(wall, u1, u1 + T, 0, depth + T, 0, RH, AS.wall, ft.id);
     if (AS.lowerFin && ft.type === 'alcove') {
       const H = Math.min(+(AS.lowerFin.height ?? (AS.lowerFin.type === 'panelling' ? 1.15 : 1.2)), RH - 0.3);
-      wb(wall, u0 - dlo, u1 + dhi, depth - 0.008, depth, 0, H, AS.lower, ft.id);
+      for (const [a, b] of without(u0 - dlo, u1 + dhi, holes)) wb(wall, a, b, depth - 0.008, depth, 0, H, AS.lower, ft.id);
       if (!mlo) wb(wall, u0, u0 + 0.008, -0.008, depth, 0, H, AS.lower, ft.id);
       if (!mhi) wb(wall, u1 - 0.008, u1, -0.008, depth, 0, H, AS.lower, ft.id);
     }
@@ -462,7 +475,7 @@ export function buildRoom(spec, opts = {}) {
     // skirting and coving carry on round the inside (wrapping the outside corners of the opening)
     const full = h >= RH - 0.01, top = full ? RH : h;
     const trimRound = (t, z0, z1, wrap) => {
-      wb(wall, u0 - dlo, u1 + dhi, depth - t, depth, z0, z1, M.trim);
+      for (const [a, b] of without(u0 - dlo, u1 + dhi, holes.filter(hh => z0 < hh[2]))) wb(wall, a, b, depth - t, depth, z0, z1, M.trim);
       const d0 = wrap ? -t : 0;
       if (!mlo) wb(wall, u0, u0 + t, d0, depth, z0, z1, M.trim);
       if (!mhi) wb(wall, u1 - t, u1, d0, depth, z0, z1, M.trim);
@@ -487,6 +500,56 @@ export function buildRoom(spec, opts = {}) {
     if (fw) wb(wall, u1 - fw + 0.01, u1 - 0.01, back - 0.66, back, 0, 1.85, M.fridge, fid);
   };
 
+  const buildDoor = (ft, wall, corr) => {
+    const [u0, u1] = span(ft);
+    const h = +(ft.height ?? 2.0);
+    wb(wall, u0 - 0.07, u0, -0.02, 0, 0, h + 0.07, M.trim, ft.id);
+    wb(wall, u1, u1 + 0.07, -0.02, 0, 0, h + 0.07, M.trim, ft.id);
+    wb(wall, u0 - 0.07, u1 + 0.07, -0.02, 0, h, h + 0.07, M.trim, ft.id);
+    const beyond = ft.beyond === 'hall' ? 'corridor' : (ft.beyond || 'corridor');
+    if (beyond === 'closed') {
+      wb(wall, u0, u1, T * 0.35, T * 0.35 + 0.04, 0, h, M.door, ft.id);
+    } else {
+      if (beyond === 'room') sideRoom(ft, wall, u0, u1);
+      else if (beyond !== 'outside') {
+        // a corridor along the wall, stopping short of anything else built beyond it (same rule as the generator)
+        const [ca, cb, cw] = corr;
+        const hm = beyond === 'dark' ? M.dark : M.wall, back = T + cw;
+        wb(wall, ca - T, cb + T, back, back + T, 0, RH, hm, ft.id);
+        wb(wall, ca - T, ca, 0, back + T, 0, RH, hm, ft.id);
+        wb(wall, cb, cb + T, 0, back + T, 0, RH, hm, ft.id);
+        const a = w2(wall, ca, T / 2), b = w2(wall, cb, back);
+        zones.push({ name: ft.id + '_hall', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: beyond === 'dark' ? M.dark : M.floor, h: RH, fid: ft.id });
+      }
+      // open leaf, swung out into the hall from the u1 side
+      const lw = u1 - u0, ang = 78 * Math.PI / 180;
+      const hinge = w2(wall, u1, T, 0);
+      const leaf = new THREE.Mesh(new THREE.BoxGeometry(lw, h - 0.01, 0.04), M.door);
+      leaf.geometry.translate(-lw / 2, (h - 0.01) / 2, 0.02);
+      const closed = { north: 0, south: 0, east: Math.PI / 2, west: Math.PI / 2 }[baseOf(wall)];
+      const swing = { north: -ang, south: ang, east: ang, west: -ang }[baseOf(wall)];
+      leaf.position.copy(b2t(hinge[0], hinge[1], 0)); leaf.rotation.y = closed + swing;
+      add(leaf, ft.id);
+    }
+  };
+  // another room through a door: walls, floor and ceiling, and a window on its far wall if asked for
+  const sideRoom = (ft, wall, u0, u1) => {
+    const rm = ft.room || {};
+    const rw = Math.max(u1 - u0 + 0.4, +(rm.width ?? 3)), rd = Math.max(1, +(rm.depth ?? 3)), rp = +(rm.pos ?? (u0 + u1) / 2);
+    const ru0 = Math.min(u0 - 0.2, rp - rw / 2), ru1 = Math.max(u1 + 0.2, rp + rw / 2), back = T + rd;
+    wb(wall, ru0 - T, ru0, T, back + T, 0, RH, M.wall, ft.id);
+    wb(wall, ru1, ru1 + T, T, back + T, 0, RH, M.wall, ft.id);
+    for (const [a, b] of without(ru0, ru1, [[u0, u1]])) wb(wall, a, b, T, T + 0.02, 0, RH, M.wall, ft.id);
+    if (rm.window) {
+      const far = virtualWall(wall, back, `${wall}@${ft.id}_far`), ww = Math.min(1.6, rw - 0.8), wp = (ru0 + ru1) / 2;
+      for (const [a, b] of without(ru0 - T, ru1 + T, [[wp - ww / 2, wp + ww / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
+      wb(far, wp - ww / 2, wp + ww / 2, 0, T, 0, 0.85, M.wall, ft.id); wb(far, wp - ww / 2, wp + ww / 2, 0, T, 2.1, RH, M.wall, ft.id);
+      wb(far, wp - ww / 2, wp + ww / 2, T * 0.7, T * 0.72, 0.85, 2.1, M.glass, ft.id);
+    } else wb(wall, ru0 - T, ru1 + T, back, back + T, 0, RH, M.wall, ft.id);
+    const a = w2(wall, ru0, T / 2), b = w2(wall, ru1, back);
+    zones.push({ name: ft.id + '_room', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: M.floor, h: RH, fid: ft.id });
+  };
+
   for (const ft of feats) {
     const wall = ft.wall; if (!walls[wall]) continue;
     const [u0, u1] = span(ft);
@@ -494,6 +557,13 @@ export function buildRoom(spec, opts = {}) {
       const depth = +(ft.depth ?? 0.6), h = Math.min(+(ft.height ?? RH), RH);
       recess(ft, wall, depth, h);
       if (h < RH - 0.01) wb(wall, u0, u1, 0, depth, h - 0.01, h, M.ceiling, ft.id);
+      (ft.doors || []).forEach((dd, k) => {                    // doors in the back of the alcove
+        const vw = virtualWall(wall, depth, `${wall}@${ft.id}`), w = walls[wall];
+        const cw = { hospital: 1.9, court: 2.2, custody: 1.6 }[spec.style] || 1.15, [d0, d1] = span(dd);
+        buildDoor({ ...dd, id: ft.id, type: 'door', wall: vw }, vw, [Math.min(Math.max(w.lo, u0 - 1.2), d0 - 0.2), Math.max(Math.min(w.hi, u1 + 1.2), d1 + 0.2), cw]);
+        const p0 = w2(vw, d0, -0.01), p1 = w2(vw, d1, T / 2 + 0.01);                     // floor through the doorway
+        zones.push({ name: `${ft.id}_door${k}_sill`, x0: Math.min(p0[0], p1[0]), y0: Math.min(p0[1], p1[1]), x1: Math.max(p0[0], p1[0]), y1: Math.max(p0[1], p1[1]), floor: M.floor, h: Math.min(+(dd.height ?? 2), RH), fid: ft.id });
+      });
       const n = +(ft.shelves || 0);
       for (let i = 0; i < n; i++) {
         const z = n > 1 ? 0.35 + i * (Math.min(RH, 2.1) - 0.5) / (n - 1) : 1.0;
@@ -526,34 +596,7 @@ export function buildRoom(spec, opts = {}) {
       }
       if (dressing === 'nets_curtains') wb(wall, u0, u1, -0.04, -0.03, s, s + h, M.nets, ft.id);
     } else if (ft.type === 'door') {
-      const h = +(ft.height ?? 2.0);
-      wb(wall, u0 - 0.07, u0, -0.02, 0, 0, h + 0.07, M.trim, ft.id);
-      wb(wall, u1, u1 + 0.07, -0.02, 0, 0, h + 0.07, M.trim, ft.id);
-      wb(wall, u0 - 0.07, u1 + 0.07, -0.02, 0, h, h + 0.07, M.trim, ft.id);
-      const beyond = ft.beyond === 'hall' ? 'corridor' : (ft.beyond || 'corridor');
-      if (beyond === 'closed') {
-        wb(wall, u0, u1, T * 0.35, T * 0.35 + 0.04, 0, h, M.door, ft.id);
-      } else {
-        if (beyond !== 'outside') {
-          // a corridor along the wall, stopping short of anything else built beyond it (same rule as the generator)
-          const [ca, cb, cw] = corridorExtent(spec, ft);
-          const hm = beyond === 'dark' ? M.dark : M.wall, back = T + cw;
-          wb(wall, ca - T, cb + T, back, back + T, 0, RH, hm, ft.id);
-          wb(wall, ca - T, ca, 0, back + T, 0, RH, hm, ft.id);
-          wb(wall, cb, cb + T, 0, back + T, 0, RH, hm, ft.id);
-          const a = w2(wall, ca, T / 2), b = w2(wall, cb, back);
-          zones.push({ name: ft.id + '_hall', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: beyond === 'dark' ? M.dark : M.floor, h: RH, fid: ft.id });
-        }
-        // open leaf, swung out into the hall from the u1 side
-        const lw = u1 - u0, ang = 78 * Math.PI / 180;
-        const hinge = w2(wall, u1, T, 0);
-        const leaf = new THREE.Mesh(new THREE.BoxGeometry(lw, h - 0.01, 0.04), M.door);
-        leaf.geometry.translate(-lw / 2, (h - 0.01) / 2, 0.02);
-        const closed = { north: 0, south: 0, east: Math.PI / 2, west: Math.PI / 2 }[wall];
-        const swing = { north: -ang, south: ang, east: ang, west: -ang }[wall];
-        leaf.position.copy(b2t(hinge[0], hinge[1], 0)); leaf.rotation.y = closed + swing;
-        add(leaf, ft.id);
-      }
+      buildDoor(ft, wall, corridorExtent(spec, ft));
     } else if (ft.type === 'arch') {
       const room = ft.room || { type: 'recess', depth: 1.0 };
       const depth = +(room.depth ?? 2.0), rpos = +(room.pos ?? ft.pos), rw = +(room.width ?? (+ft.width + 1.0));

@@ -843,6 +843,23 @@ async function saveCustomPreset() {
 }
 
 // ---------------------------------------------------------------- Walls tab
+// what is through a door: a corridor, another room, outside, dark, or shut
+function beyondEditor(d, key, commit, fld) {
+  const by = d.beyond === 'hall' ? 'corridor' : (d.beyond || 'corridor');
+  const out = [row('Beyond it', radio(key + 'b', [['corridor', 'Corridor'], ['room', 'Another room'], ['outside', 'Outside'], ['dark', 'Dark'], ['closed', 'Closed']], by, v => { d.beyond = v; if (v === 'room') d.room ||= { width: 3, depth: 3, window: true }; commit(); })),
+    el('p', { class: 'note' }, { corridor: spec.style === 'hospital' ? 'A ward corridor runs along the wall: handrails, panel lights, double doors and a noticeboard opposite.' : 'A hallway runs along the wall: a door to another room, a radiator and picture, and the front door at one end.',
+      room: 'A lit room you can see into, decorated like this one. Put models in it in Plan view (they sit beyond the real wall, so nothing lands on the projected floor).',
+      outside: 'Opens straight onto the outside view.', dark: 'An unlit corridor.', closed: 'The door is shut.' }[by])];
+  if (by === 'room') {
+    d.room ||= { width: 3, depth: 3, window: true };
+    out.push(fld('Room width', 'width', 1.5, 8, 0.1, d.room), fld('Room depth', 'depth', 1.0, 6, 0.1, d.room),
+      el('div', { class: 'row chks' },
+        el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall'),
+        el('label', {}, el('input', { type: 'checkbox', checked: d.room.lit !== false, onchange: e => { d.room.lit = e.target.checked; commit(); } }), ' Light on')));
+  }
+  return out;
+}
+
 // "From left corner": distance from the left-hand corner as you face the wall from inside the room to the feature's centre.
 function leftDist(f) { const w = roomFrame(spec).walls[f.wall]; return (f.wall === 'north' || f.wall === 'west') ? +f.pos - w.lo : w.hi - +f.pos; }
 function setLeftDist(f, d) { const w = roomFrame(spec).walls[f.wall]; f.pos = r2((f.wall === 'north' || f.wall === 'west') ? w.lo + d : w.hi - d); }
@@ -916,7 +933,7 @@ function tabWalls(body) {
         fld('Width', 'width', 0.4, Math.max(0.5, L)),
       );
       if (f.type === 'alcove') {
-        card.append(fld('Depth', 'depth', 0.2, 4.0));
+        card.append(fld('Depth', 'depth', 0.2, 6.0));
         card.append(overrideEditor(f, 'finish', () => {
           const wf = spec.wall_finishes?.[f.wall];
           return [wf?.walls || spec.finishes?.walls || {}, wf && 'lower' in wf ? wf.lower : (spec.finishes?.lower || { type: 'none' })];
@@ -924,14 +941,31 @@ function tabWalls(body) {
         if (+f.depth > 1.2) card.append(el('p', { class: 'note' }, 'Deep bays get their own ceiling light' + (spec.style === 'hospital' ? ', and a bed-head services panel on the back wall when deeper than 1.5 m.' : '.')));
         card.append(row('Shelves', numIn(f.shelves || 0, 1, v => { f.shelves = Math.max(0, Math.min(8, Math.round(v))); commit(); }, { min: 0, max: 8 })));
         if (adv) card.append(row('Height', numIn(f.height ?? spec.room.height, 0.01, v => { f.height = v; commit(); }), el('span', { class: 'note' }, 'm (full height = room height)')));
+        // doors in the back wall of the alcove, to a corridor or another room
+        const [a0, a1] = [+f.pos - +f.width / 2, +f.pos + +f.width / 2], leftEnd = f.wall === 'north' || f.wall === 'west';
+        const ah = Math.min(+(f.height ?? spec.room.height), spec.room.height);
+        card.append(el('div', { class: 'row' }, el('b', {}, 'Doors in the back'),
+          el('button', { style: 'margin-left:auto', onclick: () => { f.doors ||= []; const w = Math.min(0.86, +f.width - 0.2);
+            if (w < 0.6) { toast('The alcove is too narrow for a door: make it at least 0.8 m wide.', true); return; }
+            if (ah < 2.0) { toast('The alcove needs to be full height (or at least 2 m) for a door.', true); return; }
+            f.doors.push({ pos: r2(+f.pos), width: r2(w), height: Math.min(2.0, r2(ah - 0.1)), beyond: 'room', room: { width: 3, depth: 3, window: true } }); commit(); } }, '+ Door')));
+        (f.doors || []).forEach((dd, k) => {
+          const dl = () => r2(leftEnd ? +dd.pos - a0 : a1 - +dd.pos), setDl = v => { const half = +dd.width / 2; v = Math.max(half, Math.min(+f.width - half, v)); dd.pos = r2(leftEnd ? a0 + v : a1 - v); };
+          const sub = el('div', { class: 'card', style: 'margin:6px 0 0;padding:8px' },
+            el('div', { class: 'head' }, el('b', {}, `Door ${k + 1}`),
+              el('button', { class: 'danger', title: 'Remove', onclick: () => { f.doors.splice(k, 1); if (!f.doors.length) delete f.doors; commit(); } }, '✕')),
+            adv ? row('From left corner', numIn(dl(), 0.01, v => { setDl(v); commit(); }), el('span', { class: 'note' }, 'm to centre'))
+                : row('From left corner', ...slider(dl(), 0, +f.width, 0.05, v => { setDl(v); live(); }, v => { setDl(v); commit(); })),
+            fld('Width', 'width', 0.6, Math.max(0.65, +f.width - 0.1), 0.05, dd),
+            fld('Height', 'height', 1.8, Math.max(1.85, ah - 0.05), 0.05, dd),
+            ...beyondEditor(dd, `${f.id}d${k}`, commit, fld));
+          card.append(sub);
+        });
       }
       if (f.type === 'kitchenette') card.append(fld('Depth', 'depth', 0.62, 1.2), el('p', { class: 'note' }, 'A fitted run in a recess: base units, worktop, sink, hob, wall units and a fridge-freezer if there is room.'));
       if (f.type === 'door') {
         card.append(fld('Height', 'height', 1.8, Math.max(1.9, spec.room.height - 0.05)));
-        const by = f.beyond === 'hall' ? 'corridor' : (f.beyond || 'corridor');
-        card.append(row('Beyond it', radio(f.id + 'b', [['corridor', 'Corridor'], ['outside', 'Outside'], ['dark', 'Dark'], ['closed', 'Closed']], by, v => { f.beyond = v; commit(); })));
-        card.append(el('p', { class: 'note' }, { corridor: spec.style === 'hospital' ? 'A ward corridor runs along the wall: handrails, panel lights, double doors and a noticeboard opposite.' : 'A hallway runs along the wall: a door to another room, a radiator and picture, and the front door at one end.',
-          outside: 'Opens straight onto the outside view.', dark: 'An unlit corridor.', closed: 'The door is shut.' }[by]));
+        card.append(...beyondEditor(f, f.id, commit, fld));
       }
       if (f.type === 'window') {
         card.append(fld('Sill height', 'sill', 0.2, spec.room.height - 0.6), fld('Height', 'height', 0.4, spec.room.height - 0.3));
