@@ -852,15 +852,23 @@ function beyondEditor(d, key, commit, fld) {
       outside: 'Opens straight onto the outside view.', dark: 'An unlit corridor.', closed: 'The door is shut.' }[by])];
   if (by === 'room') {
     d.room ||= { width: 3, depth: 3, window: true };
-    const RT = { room: ['Room', 3, 3], toilet: ['Toilet', 1.3, 1.8], cupboard: ['Cupboard', 1.0, 0.8], conservatory: ['Conservatory', 3.4, 3.0], hallway: ['Hallway', 2.0, 4.0], porch: ['Porch', 1.8, 1.4] };
+    const RT = { room: ['Room', 3, 3], toilet: ['Toilet', 1.3, 1.8], bathroom: ['Bathroom', 2.4, 2.1], cupboard: ['Cupboard', 1.0, 0.8], conservatory: ['Conservatory', 3.4, 3.0], hallway: ['Hallway', 2.0, 4.0], porch: ['Porch', 1.8, 1.4] };
+    const STYLES = { toilet: [['', 'Standard', 1.3, 1.8], ['accessible', 'Accessible', 1.7, 2.2]], bathroom: [['', 'Family bathroom', 2.4, 2.1], ['wetroom', 'Accessible wet room', 2.4, 2.4]],
+      hallway: [['', 'Straight stairs', 2.0, 4.0], ['turning', 'Turning at the top', 2.8, 4.0]] };
     const kind = d.room.type || 'room';
-    out.push(row('Kind', radio(key + 'k', Object.entries(RT).map(([k, v]) => [k, v[0]]), kind, v => { d.room.type = v; d.room.width = RT[v][1]; d.room.depth = RT[v][2]; commit(); })),
-      el('p', { class: 'note' }, { room: 'An empty room: put furniture in it from Plan view.', toilet: 'A WC: toilet, basin and mirror, tiled walls and floor, a small frosted window if you tick Window.',
+    out.push(row('Kind', radio(key + 'k', Object.entries(RT).map(([k, v]) => [k, v[0]]), kind, v => { d.room.type = v; delete d.room.style; d.room.width = RT[v][1]; d.room.depth = RT[v][2]; commit(); })));
+    if (STYLES[kind]) out.push(row('Style', radio(key + 'y', STYLES[kind].map(([v, l]) => [v || 'std', l]), d.room.style || 'std', v => {
+      const st = STYLES[kind].find(x => (x[0] || 'std') === v); if (v === 'std') delete d.room.style; else d.room.style = v; d.room.width = st[2]; d.room.depth = st[3]; commit(); })));
+    if (kind === 'hallway') out.push(row('Stairs on the', radio(key + 'st', [['left', 'Left'], ['right', 'Right']], d.room.stairs || 'left', v => { d.room.stairs = v; commit(); })));
+    out.push(
+      el('p', { class: 'note' }, { room: 'An empty room: put furniture in it from Plan view.',
+        toilet: d.room.style === 'accessible' ? 'An accessible WC: toilet near the side wall with a raised seat, grab rails and a drop-down rail, a basin in reach, and a red emergency pull cord.' : 'A WC: toilet, basin and mirror, tiled walls and floor, a small frosted window if you tick Window.',
+        bathroom: d.room.style === 'wetroom' ? 'An accessible wet room: level shower with a fold-down seat and grab rails, a shower curtain, toilet with rails, basin and an emergency pull cord.' : 'A family bathroom: bath with a shower over it and a glass screen, toilet, basin with mirror, and a chrome towel radiator.',
         cupboard: 'A store cupboard: shelves, boxes, a basket and a broom; a dim light.', conservatory: 'Glass walls and roof on a low wall, a tiled floor, a table and chairs and plants; lit by the sky.',
-        hallway: 'A hall with stairs going up one side, a radiator, coat hooks and the front door at the far end.', porch: 'A small glazed porch: tiled floor, doormat, and the front door open to the outside.' }[kind]));
+        hallway: 'A hall with stairs going up one side through the ceiling to a landing (straight, or turning at the top), a radiator, coat hooks and the front door.', porch: 'A small glazed porch: tiled floor, doormat, and the front door open to the outside.' }[kind]));
     out.push(fld('Room width', 'width', 0.8, 8, 0.1, d.room), fld('Room depth', 'depth', 0.6, 6, 0.1, d.room),
       el('div', { class: 'row chks' },
-        ['room', 'toilet'].includes(kind) ? el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall') : null,
+        ['room', 'toilet', 'bathroom'].includes(kind) ? el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall') : null,
         el('label', {}, el('input', { type: 'checkbox', checked: d.room.lit !== false, onchange: e => { d.room.lit = e.target.checked; commit(); } }), ' Light on')));
   }
   return out;

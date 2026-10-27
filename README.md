@@ -57,8 +57,10 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
    once into `textures/hdri/` (about 100 MB each at full quality).
    **Doors in alcoves** (Walls tab, on the alcove's card): alcoves can be up to 6 m deep, and each can have doors in its
    back or side walls. Any door can open onto a corridor, outside, darkness, stay shut, or lead to **another room** of a
-   chosen kind: an empty room (put models in it), a toilet, a store cupboard, a conservatory (glass walls and roof), a
-   hallway (stairs up through the ceiling to a landing, and the front door) or a porch (front door open to outside).
+   chosen kind: an empty room (put models in it), a toilet (standard or accessible, with grab rails and a pull cord), a
+   bathroom (family bathroom, or accessible wet room), a store cupboard, a conservatory (glass walls and roof), a hallway
+   (stairs on the left or right, straight or turning at the top, up through the ceiling to a landing, and the front door)
+   or a porch (front door open to outside).
    **Windows** can have blinds, curtains, nets + curtains or frosted glass. **Doors** open onto a corridor that suits the
    style (a ward corridor for hospital, a hallway with a front door for homes), straight outside, a dark corridor, or stay shut.
 4. **Views**: "centre" is where students stand. Add more (e.g. looking into the kitchen) for extra tablet buttons.

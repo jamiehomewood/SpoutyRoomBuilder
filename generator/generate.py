@@ -1476,7 +1476,8 @@ def door(ft, wall):
         k = w2world(wall, u0 + 0.08, T * 0.35 - 0.03, 1.0)
         cylinder_obj(f"{fid}_handle", 0.02, 0.06, k, MAT["steel"], rot=(math.pi / 2, 0, 0) if WALLS[wall]["axis"] == "x" else (0, math.pi / 2, 0))
 
-ROOM_TYPES = {"room": (3.0, 3.0), "toilet": (1.3, 1.8), "cupboard": (1.0, 0.8), "conservatory": (3.4, 3.0), "hallway": (2.0, 4.0), "porch": (1.8, 1.4)}
+ROOM_TYPES = {"room": (3.0, 3.0), "toilet": (1.3, 1.8), "bathroom": (2.4, 2.1), "cupboard": (1.0, 0.8), "conservatory": (3.4, 3.0), "hallway": (2.0, 4.0), "porch": (1.8, 1.4)}
+STYLE_SIZES = {("toilet", "accessible"): (1.7, 2.2), ("bathroom", "wetroom"): (2.4, 2.4), ("hallway", "turning"): (2.8, 4.0)}
 _side_mats = {}
 OPEN_SIDES = set()                                    # real walls whose outside the renders need to see through
 def side_mat(key):
@@ -1490,6 +1491,10 @@ def side_mat(key):
          "mat": lambda: flat("Doormat_coir", (0.28, 0.18, 0.09), 0.95),
          "stair": lambda: wood_mat("Stair_wood", {"wood": "oak"}, floor=False),
          "white": lambda: flat("Gloss_white", (0.86, 0.86, 0.84), 0.25, coat=0.3),
+         "grey_tiles": lambda: apply_condition(tiles_mat("Wetroom_wall_tiles", {"tile_size": "sq30", "colour": "#d9dbd8", "grout": "#a9aca8"}, wall=True), "wall"),
+         "nonslip": lambda: apply_condition(tiles_mat("Nonslip_floor", {"tile_size": "sq15", "colour": "#8d9294", "grout": "#5e6264"}, wall=False), "floor"),
+         "red": lambda: flat("Pull_cord_red", (0.75, 0.04, 0.03), 0.5),
+         "shower_curtain": lambda: flat("Shower_curtain", (0.82, 0.86, 0.88), 0.7),
          }[key]()
     if DMG > 0.01 and key in ("ceramic", "white", "stair"): m = age_object_mat(m, DMG * 0.8, "model")
     _side_mats[key] = m; return m
@@ -1505,7 +1510,8 @@ def sloped_bar(name, wall, ua, ub, d0, z0, d1, z1, th, m):
 def side_room(ft, wall, u0, u1, fid):
     """What is through a door: a plain room, a toilet, a cupboard, a conservatory, a hallway with stairs, or a porch."""
     rm = ft.get("room") or {}
-    kind = rm.get("type", "room"); dw, dd = ROOM_TYPES.get(kind, ROOM_TYPES["room"])
+    kind = rm.get("type", "room"); style = rm.get("style", "")
+    dw, dd = STYLE_SIZES.get((kind, style), ROOM_TYPES.get(kind, ROOM_TYPES["room"]))
     rw, rd = max(u1 - u0 + 0.3, float(rm.get("width", dw))), max(0.6, float(rm.get("depth", dd)))
     rp = float(rm.get("pos", (u0 + u1) / 2))
     ru0, ru1 = min(u0 - 0.15, rp - rw / 2), max(u1 + 0.15, rp + rw / 2)
@@ -1540,7 +1546,12 @@ def side_room(ft, wall, u0, u1, fid):
     cu = (ru0 + ru1) / 2
     # ---- the far wall: window, glazing, or the outside door
     ocu = cu
-    if kind == "hallway": ocu = min(ru1 - 0.5, max(cu, min(ru0 + 0.9, ru1 - 0.6) + 0.5))     # front door beside the stairs, not behind them
+    s_left_a = wbase(wall) in ("north", "west")              # which side is 'left' as you come in through the door
+    if rm.get("stairs", "left") == "right": s_left_a = not s_left_a
+    if kind == "hallway":                                     # front door beside the stairs (and past any turn), not behind them
+        clear = 0.9 + (3 * 0.25 if style == "turning" and (ru1 - ru0) >= 0.9 + 0.75 + 1.0 else 0.0) + 0.5
+        x = min((ru1 - ru0) - 0.5, max((ru1 - ru0) / 2, clear))
+        ocu = (ru0 + x) if s_left_a else (ru1 - x)
     if kind == "porch" or kind == "hallway":
         ow, oh = 0.9, 2.05
         c_ = ocu
@@ -1559,7 +1570,7 @@ def side_room(ft, wall, u0, u1, fid):
         for k in range(n + 1):
             u = ru0 + (ru1 - ru0) * k / n; fw(f"room_back_post{k}", u - 0.03, u + 0.03, zd, RH, MAT["frame"])
     elif rm.get("window") and kind != "cupboard":
-        small = kind == "toilet"
+        small = kind in ("toilet", "bathroom")
         ww = 0.6 if small else min(1.6, rw - 0.8); sill = 1.35 if small else 0.85; wh = 0.6 if small else 1.25
         for a, b in spans_without(ru0 - T, ru1 + T, [(cu - ww / 2, cu + ww / 2)]): fw("room_back", a, b, 0, RH, wm)
         fw("room_back_under", cu - ww / 2, cu + ww / 2, 0, sill, wm); fw("room_back_over", cu - ww / 2, cu + ww / 2, sill + wh, RH, wm)
@@ -1568,7 +1579,8 @@ def side_room(ft, wall, u0, u1, fid):
     else:
         fw("room_back", ru0 - T, ru1 + T, 0, RH, wm)
     # ---- floor, ceiling (a conservatory has a glass roof instead), skirting
-    floor_m = {"toilet": side_mat("wc_floor"), "conservatory": side_mat("quarry"), "porch": side_mat("quarry")}.get(kind, MAT["floor"])
+    floor_m = {"toilet": side_mat("nonslip" if style == "accessible" else "wc_floor"), "bathroom": side_mat("nonslip" if style == "wetroom" else "wc_floor"),
+               "conservatory": side_mat("quarry"), "porch": side_mat("quarry")}.get(kind, MAT["floor"])
     mn, mx = wbox_world(wall, ru0, ru1, T / 2, back, 0, 0)
     zones.append((f"{fid}_room", mn, mx, floor_m, None if kind in ("conservatory", "hallway") else RH))   # the hall builds its own (with the stairwell)
     if kind == "conservatory":
@@ -1584,7 +1596,93 @@ def side_room(ft, wall, u0, u1, fid):
     def model(mid, u, d, z=0.0, scale=1.0, turn=0.0):
         try: age_model(place_model(mid, w2world(wall, u, d, z), rot_in + turn, scale), DMG * 0.8)
         except Exception as e: log("side room model failed", mid, e)
-    if kind == "toilet":
+    S_ = MAT["steel"]
+    def tiles(m, H, back_h=None):                                # tiled walls (higher round a bath or shower)
+        bw("tiles_back", ru0, ru1, back - 0.008, back, 0, back_h or H, m)
+        bw("tiles_a", ru0, ru0 + 0.008, T, back, 0, H, m); bw("tiles_b", ru1 - 0.008, ru1, T, back, 0, H, m)
+    def wc_back(nm, u, seat_z=0.42):                            # a toilet against the far wall, centred at u
+        c, w_ = side_mat("ceramic"), side_mat("white")
+        bw(f"{nm}_cistern", u - 0.19, u + 0.19, back - 0.19, back - 0.008, seat_z, seat_z + 0.38, c)
+        bw(f"{nm}_pan", u - 0.17, u + 0.17, back - 0.68, back - 0.19, 0.0, seat_z - 0.03, c)
+        bw(f"{nm}_seat", u - 0.19, u + 0.19, back - 0.72, back - 0.17, seat_z - 0.03, seat_z, w_)
+        bw(f"{nm}_flush", u - 0.03, u + 0.03, back - 0.2, back - 0.185, seat_z + 0.3, seat_z + 0.34, S_)
+    def wc_side(nm, d, at_b=True, seat_z=0.42):                 # a toilet against a side wall, centred at depth d
+        c, w_ = side_mat("ceramic"), side_mat("white")
+        e = ru1 - 0.008 if at_b else ru0 + 0.008; sg = -1 if at_b else 1
+        U = lambda x0, x1: (min(e + sg * x0, e + sg * x1), max(e + sg * x0, e + sg * x1))
+        bw(f"{nm}_cistern", *U(0, 0.18), d - 0.19, d + 0.19, seat_z, seat_z + 0.38, c)
+        bw(f"{nm}_pan", *U(0.18, 0.68), d - 0.17, d + 0.17, 0.0, seat_z - 0.03, c)
+        bw(f"{nm}_seat", *U(0.16, 0.72), d - 0.19, d + 0.19, seat_z - 0.03, seat_z, w_)
+    def basin_side(nm, d, at_b=True, z=0.82, mirror=True):      # a wall-hung basin on a side wall
+        c = side_mat("ceramic"); e = ru1 - 0.008 if at_b else ru0 + 0.008; sg = -1 if at_b else 1
+        U = lambda x0, x1: (min(e + sg * x0, e + sg * x1), max(e + sg * x0, e + sg * x1))
+        bw(f"{nm}_basin", *U(0, 0.42), d - 0.25, d + 0.25, z, z + 0.08, c)
+        bw(f"{nm}_tap", *U(0.02, 0.07), d - 0.02, d + 0.02, z + 0.08, z + 0.22, S_)
+        if mirror: bw(f"{nm}_mirror", *U(0, 0.01), d - 0.25, d + 0.25, z + 0.4, z + 1.0, side_mat("mirror"))
+    def rail_x(nm, at_b, d0, d1, z, off=0.04):                  # a grab rail along a side wall
+        e = ru1 - off if at_b else ru0 + off
+        bw(nm, min(e, e + (-0.035 if at_b else 0.035)), max(e, e + (-0.035 if at_b else 0.035)), d0, d1, z, z + 0.035, S_)
+    def rail_v(nm, at_b, d, z0, z1, off=0.04):                  # a vertical grab rail on a side wall
+        e = ru1 - off if at_b else ru0 + off
+        bw(nm, min(e, e + (-0.035 if at_b else 0.035)), max(e, e + (-0.035 if at_b else 0.035)), d - 0.018, d + 0.018, z0, z1, S_)
+    def pull_cord(nm, u, d):                                    # red emergency pull cord from the ceiling to near the floor
+        r = side_mat("red")
+        bw(f"{nm}_cord", u - 0.003, u + 0.003, d - 0.003, d + 0.003, 0.1, RH, r)
+        for k, z in enumerate((0.1, 0.85)): bw(f"{nm}_bangle{k}", u - 0.035, u + 0.035, d - 0.008, d + 0.008, z, z + 0.06, r)
+        bw(f"{nm}_box", u - 0.05, u + 0.05, d - 0.05, d + 0.05, RH - 0.03, RH, side_mat("white"))
+    if kind == "toilet" and style == "accessible":
+        # an accessible WC: toilet near one side wall, grab rails, drop-down rail, raised seat, basin in reach, pull cord
+        tiles(side_mat("wc_tiles"), 1.2)
+        tu = ru0 + 0.5
+        wc_back("awc", tu, seat_z=0.48)
+        rail_x("awc_rail_h", False, back - 0.8, back - 0.15, 0.68)
+        rail_v("awc_rail_v", False, back - 0.85, 0.8, 1.4)
+        bw("awc_dropdown", tu + 0.3, tu + 0.335, back - 0.78, back - 0.008, 0.68, 0.715, S_)            # hinged rail on the open side
+        bw("awc_dropdown_plate", tu + 0.28, tu + 0.355, back - 0.05, back - 0.008, 0.62, 0.78, S_)
+        basin_side("awc", back - 1.0, at_b=False, z=0.72)
+        pull_cord("awc", tu + 0.55, back - 0.9)
+        bw("awc_roll", ru0 + 0.008, ru0 + 0.12, back - 0.55, back - 0.45, 0.7, 0.82, side_mat("white"))
+    elif kind == "bathroom" and style == "wetroom":
+        # an accessible wet room: level shower with a fold-down seat and rails, curtain, toilet with rails, basin
+        tiles(side_mat("grey_tiles"), RH - 0.02)
+        bw("wr_drain", ru0 + 0.55, ru0 + 0.75, back - 0.75, back - 0.55, 0.0, 0.004, MAT["dark"])
+        bw("wr_riser", ru0 + 0.58, ru0 + 0.6, back - 0.04, back - 0.008, 1.0, 2.0, S_)
+        bw("wr_head", ru0 + 0.53, ru0 + 0.65, back - 0.16, back - 0.04, 1.95, 2.0, S_)
+        bw("wr_controls", ru0 + 0.75, ru0 + 0.95, back - 0.06, back - 0.008, 1.0, 1.12, S_)
+        bw("wr_seat", ru0 + 0.008, ru0 + 0.42, back - 0.95, back - 0.5, 0.47, 0.5, side_mat("white"))      # fold-down seat, down
+        bw("wr_seat_bracket", ru0 + 0.008, ru0 + 0.05, back - 0.95, back - 0.5, 0.3, 0.47, S_)
+        rail_x("wr_rail_h", False, back - 1.3, back - 1.0, 0.85); rail_v("wr_rail_v", False, back - 0.4, 0.8, 1.5)
+        bw("wr_rail_back", ru0 + 0.9, ru0 + 1.5, back - 0.045, back - 0.008, 0.85, 0.885, S_)
+        cd = back - 1.35                                      # curtain on a rail across the shower area, pulled back
+        bw("wr_curtain_rail", ru0, ru0 + 1.25, cd - 0.012, cd + 0.012, 2.0, 2.02, S_)
+        curtain(f"{fid}_wr_curtain", wall, ru0 + 0.02, ru0 + 0.45, cd, 0.12, 2.0, folds=5, m=side_mat("shower_curtain"), amp=0.04)
+        if rw >= 2.0:
+            wc_side("wr_wc", T + 0.55, at_b=True, seat_z=0.48)
+            rail_x("wr_wc_rail", True, T + 0.75, T + 1.35, 0.68)
+            bw("wr_wc_drop", ru1 - 0.75, ru1 - 0.008, T + 0.22, T + 0.255, 0.68, 0.715, S_)
+            basin_side("wr", T + 1.55, at_b=True, z=0.75)
+        pull_cord("wr", ru1 - 0.9, back - 0.6)
+    elif kind == "bathroom":
+        # a family bathroom: bath with a shower over it and a glass screen, basin, toilet, towel radiator
+        tiles(side_mat("wc_tiles"), 1.2, back_h=2.0)
+        bl = min(1.7, rw - 0.05); w_ = side_mat("white"); c = side_mat("ceramic")
+        b0, b1, bd = ru0, ru0 + bl, back - 0.72
+        bw("bath_panel", b0, b1, bd, bd + 0.03, 0, 0.55, w_)
+        for nm, (a, b, d0, d1) in {"f": (b0, b1, bd, bd + 0.06), "k": (b0, b1, back - 0.06, back), "l": (b0, b0 + 0.08, bd, back), "r": (b1 - 0.08, b1, bd, back)}.items():
+            bw(f"bath_side_{nm}", a, b, d0, d1, 0.0, 0.56, c)
+        bw("bath_bottom", b0 + 0.08, b1 - 0.08, bd + 0.06, back - 0.06, 0.0, 0.14, c)
+        bw("bath_taps", b0 + 0.1, b0 + 0.3, back - 0.06, back - 0.008, 0.62, 0.68, S_)
+        bw("bath_riser", b0 + 0.18, b0 + 0.2, back - 0.04, back - 0.008, 0.9, 1.95, S_)
+        bw("bath_head", b0 + 0.13, b0 + 0.25, back - 0.16, back - 0.04, 1.9, 1.95, S_)
+        bw("bath_screen", b0, b0 + 0.8, bd + 0.02, bd + 0.03, 0.56, 2.0, MAT["glass"])
+        bw("bath_screen_edge", b0 + 0.78, b0 + 0.8, bd + 0.015, bd + 0.035, 0.56, 2.0, S_)
+        wc_side("bath_wc", back - 1.15, at_b=True)
+        basin_side("bath", T + 0.45, at_b=False)
+        for k in range(6):                                     # chrome towel radiator on the door wall
+            bw(f"bath_towel_bar{k}", ru1 - 0.7, ru1 - 0.2, T + 0.02, T + 0.045, 0.4 + k * 0.2, 0.425 + k * 0.2, S_)
+        for x in (ru1 - 0.7, ru1 - 0.225):
+            bw(f"bath_towel_post{int(x * 100)}", x, x + 0.025, T + 0.02, T + 0.05, 0.3, 1.5, S_)
+    elif kind == "toilet":
         tm = side_mat("wc_tiles"); H = 1.2
         bw("wc_tiles_back", ru0, ru1, back - 0.008, back, 0, H, tm)
         bw("wc_tiles_a", ru0, ru0 + 0.008, T, back, 0, H, tm); bw("wc_tiles_b", ru1 - 0.008, ru1, T, back, 0, H, tm)
@@ -1614,58 +1712,85 @@ def side_room(ft, wall, u0, u1, fid):
         model("potted_plant_04", ru1 - 0.35, back - 0.35, 0.0, 1.0)
         model("potted_plant_01", ru1 - 0.35, T + 0.4, 0.0, 1.0)
     elif kind == "hallway":
-        # stairs up one side, through an opening in the ceiling to a landing, so you can see there is an upstairs
-        st = side_mat("stair"); a, b = ru0, min(ru0 + 0.9, ru1 - 0.6)
-        FL2, H2 = RH + 0.25, 2.4                                     # upstairs floor level and its ceiling height
+        # stairs up one side (left or right as you come in), straight or turning at the top, through an opening in the
+        # ceiling to a landing, so you can see there is an upstairs. Worked out across the hall in x (0 = the stairs' wall).
+        st = side_mat("stair"); Wd = ru1 - ru0
+        Ux = lambda x: (ru0 + x) if s_left_a else (ru1 - x)
+        def bx(nm, x0, x1, d0, d1, z0, z1, m):
+            a_, b_ = sorted((Ux(x0), Ux(x1))); bw(nm, a_, b_, d0, d1, z0, z1, m)
+        SW = 0.9; FL2, H2 = RH + 0.25, 2.4
         n = max(1, round(FL2 / 0.19)); rise, going = FL2 / n, 0.25
-        d_start = T + 0.5; n = min(n, int((back - d_start) // going))     # as many steps as the hall is long
-        d_end = d_start + n * going
-        for k in range(n):
-            bw(f"hall_step{k}", a, b, d_start + k * going, back, k * rise, (k + 1) * rise, st)
-        top = n * rise
-        dh0 = d_start + going                                          # the stairwell opening starts over the second step
-        # ceiling with the stairwell cut out, the floor slab above it, and the landing floor
-        pieces = [(ru0, ru1, T, dh0), (b, ru1, dh0, d_end), (ru0, ru1, d_end, back)] if top >= FL2 - 0.01 else [(ru0, ru1, T, back)]
-        for k, (u0_, u1_, d0_, d1_) in enumerate(pieces):
-            if u1_ - u0_ < 0.01 or d1_ - d0_ < 0.01: continue
-            bw(f"hall_ceiling{k}", u0_, u1_, d0_, d1_, RH - 0.005, RH + 0.005, MAT["ceiling"])
-            bw(f"hall_slab{k}", u0_, u1_, d0_, d1_, RH + 0.005, FL2, MAT["floor"])
-        if top >= FL2 - 0.01:
-            bw("hall_well_edge", b, b + 0.02, dh0, d_end, RH - 0.005, FL2 - 0.01, wm)          # plastered edge of the opening
-            bw("hall_well_edge2", a, b, dh0, dh0 + 0.02, RH - 0.005, FL2 - 0.01, wm)
+        d_start = T + 0.5
+        turn = style == "turning" and Wd >= SW + 3 * going + 1.0
+        n2 = 3 if turn else 0
+        room_d = back - d_start - (SW if turn else 0.0)            # depth available for the first flight
+        n1 = max(1, min(n - n2, int(room_d // going)))
+        for k in range(n1):
+            bx(f"hall_step{k}", 0, SW, d_start + k * going, back, k * rise, (k + 1) * rise, st)
+        d_end1 = d_start + n1 * going
+        top = n1 * rise
+        if turn:                                                    # quarter landing in the far corner, then 3 steps along the far wall
+            bx("hall_quarter_landing", 0, SW, back - SW, back, 0, top, st)
+            for k in range(n2):
+                bx(f"hall_turn_step{k}", SW + k * going, SW + (k + 1) * going, back - SW, back, 0, top + (k + 1) * rise, st)
+            top += n2 * rise
+        full = top >= FL2 - 0.01
+        dh0 = d_start + going
+        holes = [(0, SW, dh0, back)] + ([(SW, SW + n2 * going, back - SW, back)] if turn else [])
+        # ceiling and floor slab round the stairwell (a grid of pieces, skipping the opening)
+        xs = sorted({0.0, Wd, *[h[0] for h in holes], *[h[1] for h in holes]}) if full else [0.0, Wd]
+        ds = sorted({T, back, *[h[2] for h in holes], *[h[3] for h in holes]}) if full else [T, back]
+        k = 0
+        for xi in range(len(xs) - 1):
+            for di in range(len(ds) - 1):
+                x0, x1, d0, d1 = xs[xi], xs[xi + 1], ds[di], ds[di + 1]
+                if x1 - x0 < 0.01 or d1 - d0 < 0.01: continue
+                if full and any(h[0] <= x0 + 1e-6 and x1 <= h[1] + 1e-6 and h[2] <= d0 + 1e-6 and d1 <= h[3] + 1e-6 for h in holes): continue
+                bx(f"hall_ceiling{k}", x0, x1, d0, d1, RH - 0.005, RH + 0.005, MAT["ceiling"])
+                bx(f"hall_slab{k}", x0, x1, d0, d1, RH + 0.005, FL2, MAT["floor"]); k += 1
+        if full:
             UP = FL2 + H2
             bw("hall_up_a", ru0 - T, ru0, T, back + T, RH, UP, wm); bw("hall_up_b", ru1, ru1 + T, T, back + T, RH, UP, wm)
             bw("hall_up_front", ru0 - T, ru1 + T, 0, T, RH, UP, wm)
             wbox(f"{fid}_hall_up_back", far, ru0 - T, ru1 + T, 0, T, RH, UP, wm)
             bw("hall_up_ceiling", ru0, ru1, T, back, UP, UP + 0.02, MAT["ceiling"])
-            for nm, (u0_, u1_, d0_, d1_) in {"a": (ru0, ru0 + 0.018, T, back), "b": (ru1 - 0.018, ru1, T, back)}.items():
-                bw(f"hall_up_skirt_{nm}", u0_, u1_, d0_, d1_, FL2, FL2 + 0.12, MAT["trim"])
-            # banister round the opening on the landing
-            bw("land_rail", b, b + 0.05, dh0, d_end, FL2 + 0.88, FL2 + 0.93, st)
-            bw("land_rail2", a, b + 0.05, dh0 - 0.05, dh0, FL2 + 0.88, FL2 + 0.93, st)
-            dd_ = dh0 + 0.06
-            while dd_ < d_end - 0.05:
-                bw(f"land_spindle{int(dd_ * 100)}", b + 0.01, b + 0.04, dd_, dd_ + 0.03, FL2, FL2 + 0.88, MAT["trim"]); dd_ += 0.13
-            uu = a + 0.06
-            while uu < b:
-                bw(f"land_spindle_x{int(uu * 100)}", uu, uu + 0.03, dh0 - 0.04, dh0 - 0.01, FL2, FL2 + 0.88, MAT["trim"]); uu += 0.13
-            bw("land_post", b - 0.02, b + 0.07, dh0 - 0.07, dh0 + 0.02, FL2 - 0.3, FL2 + 1.05, st)
-            dm = (dh0 + back) / 2                                        # a bedroom door upstairs
-            if ru1 - b > 0.9:
-                bw("land_door", ru1 - 0.045, ru1 - 0.005, dm - 0.41, dm + 0.41, FL2, FL2 + 1.98, MAT["door"])
+            for nm, (u0_, u1_) in {"a": (ru0, ru0 + 0.018), "b": (ru1 - 0.018, ru1)}.items():
+                bw(f"hall_up_skirt_{nm}", u0_, u1_, T, back, FL2, FL2 + 0.12, MAT["trim"])
+            # banisters round the opening on the landing (the arrival at the top is left open)
+            edges = [("x", SW, dh0, back - SW if turn else back), ("d", dh0, 0, SW)] + ([("d", back - SW, SW, SW + n2 * going)] if turn else [])
+            for e, (ax, c_, p0, p1) in enumerate(edges):
+                if p1 - p0 < 0.05: continue
+                if ax == "x":
+                    bx(f"land_rail{e}", c_, c_ + 0.05, p0, p1, FL2 + 0.88, FL2 + 0.93, st)
+                    q = p0 + 0.06
+                    while q < p1 - 0.03: bx(f"land_sp{e}_{int(q * 100)}", c_ + 0.01, c_ + 0.04, q, q + 0.03, FL2, FL2 + 0.88, MAT["trim"]); q += 0.13
+                else:
+                    bx(f"land_rail{e}", p0, p1, c_ - 0.05, c_, FL2 + 0.88, FL2 + 0.93, st)
+                    q = p0 + 0.06
+                    while q < p1 - 0.03: bx(f"land_sp{e}_{int(q * 100)}", q, q + 0.03, c_ - 0.04, c_ - 0.01, FL2, FL2 + 0.88, MAT["trim"]); q += 0.13
+            bx("land_post", SW - 0.02, SW + 0.07, dh0 - 0.07, dh0 + 0.02, FL2 - 0.3, FL2 + 1.05, st)
+            if Wd - SW > 0.9:                                         # a bedroom door upstairs, on the other side wall
+                dm = (dh0 + (back - SW if turn else back)) / 2
+                bx("land_door", Wd - 0.045, Wd - 0.005, dm - 0.41, dm + 0.41, FL2, FL2 + 1.98, MAT["door"])
                 for nm, (d0_, d1_, z0_, z1_) in {"l": (dm - 0.48, dm - 0.41, FL2, FL2 + 2.05), "r": (dm + 0.41, dm + 0.48, FL2, FL2 + 2.05), "t": (dm - 0.48, dm + 0.48, FL2 + 1.98, FL2 + 2.05)}.items():
-                    bw(f"land_door_arch_{nm}", ru1 - 0.02, ru1, d0_, d1_, z0_, z1_, MAT["trim"])
-            lc2 = w2world(wall, (b + ru1) / 2, (dh0 + back) / 2, UP - 0.04)
+                    bx(f"land_door_arch_{nm}", Wd - 0.02, Wd, d0_, d1_, z0_, z1_, MAT["trim"])
+            lc2 = w2world(wall, Ux((SW + Wd) / 2), (dh0 + back) / 2, UP - 0.04)
             bpy.ops.object.light_add(type="AREA", location=lc2)
             l2 = bpy.context.active_object; l2.name = f"{fid}_landing_light"; l2.data.shape = "DISK"; l2.data.size = 0.4
             l2.data.energy = 55; l2.data.color = (1.0, 0.9, 0.75); put(l2)
-        # a handrail following the pitch of the stairs, on a newel post at the bottom
-        d0, z0 = d_start, rise + 0.85
-        d1 = d_end - going; z1 = z0 + (d1 - d0) * rise / going
-        if d1 > d0 + 0.1: sloped_bar(f"{fid}_hall_rail", wall, b - 0.045, b, d0, z0, d1, z1, 0.05, st)
-        bw("hall_newel", b - 0.07, b + 0.02, d_start - 0.05, d_start + 0.05, 0, z0 + 0.1, st)
-        bw("hall_radiator", ru1 - 0.1, ru1 - 0.03, T + 0.4, T + 1.4, 0.15, 0.7, MAT["radiator"])
-        bw("hall_hooks", ru1 - 0.03, ru1 - 0.008, T + 1.6, T + 2.4, 1.62, 1.68, side_mat("stair"))
+        # handrails following the pitch of each flight, on a newel post at the bottom
+        def rail(nm, P0, P1):
+            Pw = [w2world(wall, Ux(x), d, z) for x, d, z in (P0, P1)]
+            v = (Pw[1] - Pw[0]); hz = Vector((v.x, v.y, 0)).normalized(); side = Vector((-hz.y, hz.x, 0)) * 0.0225; up = Vector((0, 0, 0.05))
+            vs = [Pw[0] - side, Pw[0] + side, Pw[1] + side, Pw[1] - side]; vs += [p + up for p in vs]
+            me = bpy.data.meshes.new(nm); me.from_pydata([tuple(p) for p in vs], [], [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)])
+            bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(me); bm.free()
+            me.materials.append(st); o = bpy.data.objects.new(nm, me); coll("Room").objects.link(o)
+        if n1 > 1: rail(f"{fid}_hall_rail1", (SW - 0.02, d_start, rise + 0.85), (SW - 0.02, d_start + (n1 - 1) * going, n1 * rise + 0.85))
+        if turn: rail(f"{fid}_hall_rail2", (SW, back - SW + 0.02, n1 * rise + 0.85), (SW + (n2 - 1) * going, back - SW + 0.02, (n1 + n2) * rise + 0.85))
+        bx("hall_newel", SW - 0.07, SW + 0.02, d_start - 0.05, d_start + 0.05, 0, rise + 0.95, st)
+        bx("hall_radiator", Wd - 0.1, Wd - 0.03, T + 0.4, T + 1.4, 0.15, 0.7, MAT["radiator"])
+        bx("hall_hooks", Wd - 0.03, Wd - 0.008, T + 1.6, T + 2.4, 1.62, 1.68, side_mat("stair"))
         bw("hall_mat", ocu - 0.35, ocu + 0.35, back - 0.55, back - 0.05, 0.0, 0.012, side_mat("mat"))
     elif kind == "porch":
         bw("porch_mat", cu - 0.35, cu + 0.35, back - 0.6, back - 0.1, 0.0, 0.012, side_mat("mat"))

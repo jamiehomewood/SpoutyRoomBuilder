@@ -548,9 +548,10 @@ export function buildRoom(spec, opts = {}) {
     }
   };
   // another room through a door: walls, floor and ceiling, and a window on its far wall if asked for
-  const ROOM_TYPES = { room: [3, 3], toilet: [1.3, 1.8], cupboard: [1.0, 0.8], conservatory: [3.4, 3.0], hallway: [2.0, 4.0], porch: [1.8, 1.4] };
+  const ROOM_TYPES = { room: [3, 3], toilet: [1.3, 1.8], bathroom: [2.4, 2.1], cupboard: [1.0, 0.8], conservatory: [3.4, 3.0], hallway: [2.0, 4.0], porch: [1.8, 1.4] };
+  const STYLE_SIZES = { 'toilet/accessible': [1.7, 2.2], 'bathroom/wetroom': [2.4, 2.4], 'hallway/turning': [2.8, 4.0] };
   const sideRoom = (ft, wall, u0, u1) => {
-    const rm = ft.room || {}, kind = rm.type || 'room', [dw, dd] = ROOM_TYPES[kind] || ROOM_TYPES.room;
+    const rm = ft.room || {}, kind = rm.type || 'room', style = rm.style || '', [dw, dd] = STYLE_SIZES[kind + '/' + style] || ROOM_TYPES[kind] || ROOM_TYPES.room;
     const rw = Math.max(u1 - u0 + 0.3, +(rm.width ?? dw)), rd = Math.max(0.6, +(rm.depth ?? dd)), rp = +(rm.pos ?? (u0 + u1) / 2);
     let ru0 = Math.min(u0 - 0.15, rp - rw / 2), ru1 = Math.max(u1 + 0.15, rp + rw / 2);
     const keep = walls[wall].keep;                        // a door in an alcove's side wall: never back into the main room
@@ -567,7 +568,10 @@ export function buildRoom(spec, opts = {}) {
     const far = virtualWall(wall, back, `${wall}@${ft.id}_far`);
     const hole = (w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[cu - w_ / 2, cu + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
       wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, 0, z0, M.wall, ft.id); wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, cu - w_ / 2, cu + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
-    const sb = Math.min(ru0 + 0.9, ru1 - 0.6), ocu = kind === 'hallway' ? Math.min(ru1 - 0.5, Math.max(cu, sb + 0.5)) : cu;
+    let leftA = ['north', 'west'].includes(baseOf(wall)); if (rm.stairs === 'right') leftA = !leftA;
+    const Wd = ru1 - ru0, Ux = x => leftA ? ru0 + x : ru1 - x, bx = (x0, x1, d0, d1, z0, z1, m) => { const [a, b] = [Ux(x0), Ux(x1)].sort((p, q) => p - q); wb(wall, a, b, d0, d1, z0, z1, m, ft.id); };
+    const turn = kind === 'hallway' && style === 'turning' && Wd >= 0.9 + 0.75 + 1.0;
+    const ocu = kind === 'hallway' ? Ux(Math.min(Wd - 0.5, Math.max(Wd / 2, 0.9 + (turn ? 0.75 : 0) + 0.5))) : cu;
     const holeAt = (c, w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[c - w_ / 2, c + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
       wb(far, c - w_ / 2, c + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, c - w_ / 2, c + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
     if (kind === 'porch') hole(0.9, 0, 2.05, null);
@@ -577,21 +581,37 @@ export function buildRoom(spec, opts = {}) {
     else wb(far, ru0 - T, ru1 + T, 0, T, 0, RH, M.wall, ft.id);
     if (kind === 'conservatory') wb(wall, ru0 - T, ru1 + T, T, back + T, RH - 0.01, RH, M.glass, ft.id);
     // a few blocks so you can see what kind of room it is
-    if (kind === 'toilet') { wb(wall, cu - 0.19, cu + 0.19, back - 0.19, back, 0.42, 0.8, M.fridge, ft.id); wb(wall, cu - 0.17, cu + 0.17, back - 0.68, back - 0.19, 0, 0.42, M.fridge, ft.id);
-      if (rw >= 1.1) wb(wall, ru1 - 0.4, ru1, T + 0.25, T + 0.72, 0.8, 0.88, M.fridge, ft.id); }
+    const wcBack = u => { wb(wall, u - 0.19, u + 0.19, back - 0.19, back, 0.42, 0.8, M.fridge, ft.id); wb(wall, u - 0.17, u + 0.17, back - 0.68, back - 0.19, 0, 0.45, M.fridge, ft.id); };
+    if (kind === 'toilet' && style === 'accessible') { wcBack(ru0 + 0.5); wb(wall, ru0, ru0 + 0.08, back - 0.8, back - 0.15, 0.68, 0.715, M.steel || M.trim, ft.id);
+      wb(wall, ru0 + 0.8, ru0 + 0.835, back - 0.78, back, 0.68, 0.715, M.steel || M.trim, ft.id); wb(wall, ru0, ru0 + 0.42, back - 1.25, back - 0.75, 0.72, 0.8, M.fridge, ft.id); }
+    else if (kind === 'toilet') { wcBack(cu); if (rw >= 1.1) wb(wall, ru1 - 0.4, ru1, T + 0.25, T + 0.72, 0.8, 0.88, M.fridge, ft.id); }
+    if (kind === 'bathroom' && style === 'wetroom') { wb(wall, ru0, ru0 + 0.42, back - 0.95, back - 0.5, 0.47, 0.5, M.fridge, ft.id); wb(wall, ru0, ru0 + 1.25, back - 1.37, back - 1.33, 2.0, 2.02, M.trim, ft.id);
+      if (rw >= 2) wb(wall, ru1 - 0.7, ru1, T + 0.36, T + 0.74, 0, 0.48, M.fridge, ft.id); }
+    else if (kind === 'bathroom') { const bl = Math.min(1.7, rw - 0.05); wb(wall, ru0, ru0 + bl, back - 0.72, back, 0, 0.56, M.fridge, ft.id);
+      wb(wall, ru0, ru0 + 0.8, back - 0.7, back - 0.69, 0.56, 2.0, M.glass, ft.id); wb(wall, ru1 - 0.7, ru1, back - 1.34, back - 0.96, 0, 0.45, M.fridge, ft.id); wb(wall, ru0, ru0 + 0.42, T + 0.2, T + 0.7, 0.82, 0.9, M.fridge, ft.id); }
     if (kind === 'cupboard') for (const z of [0.9, 1.3, 1.7]) wb(wall, ru0, ru1, back - 0.38, back, z, z + 0.022, M.shelf, ft.id);
     if (kind === 'hallway') {                               // stairs up through an opening in the ceiling to a landing
       const FL2 = RH + 0.25, UP = FL2 + 2.4, ds = T + 0.5; let n = Math.max(1, Math.round(FL2 / 0.19)); const rise = FL2 / n; n = Math.min(n, Math.floor((back - ds) / 0.25));
-      for (let k = 0; k < n; k++) wb(wall, ru0, sb, ds + k * 0.25, back, k * rise, (k + 1) * rise, M.shelf, ft.id);
-      const dend = ds + n * 0.25, dh0 = ds + 0.25, full = n * rise >= FL2 - 0.01;
-      const pcs = full ? [[ru0, ru1, T, dh0], [sb, ru1, dh0, dend], [ru0, ru1, dend, back]] : [[ru0, ru1, T, back]];
-      for (const [a, b, d0, d1] of pcs) if (b - a > 0.01 && d1 - d0 > 0.01) { wb(wall, a, b, d0, d1, RH - 0.005, RH + 0.005, M.ceiling, ft.id); wb(wall, a, b, d0, d1, RH + 0.005, FL2, M.floor, ft.id); }
+      const n2 = turn ? 3 : 0, n1 = Math.max(1, Math.min(n - n2, Math.floor((back - ds - (turn ? 0.9 : 0)) / 0.25)));
+      for (let k = 0; k < n1; k++) bx(0, 0.9, ds + k * 0.25, back, k * rise, (k + 1) * rise, M.shelf);
+      if (turn) { bx(0, 0.9, back - 0.9, back, 0, n1 * rise, M.shelf); for (let k = 0; k < n2; k++) bx(0.9 + k * 0.25, 0.9 + (k + 1) * 0.25, back - 0.9, back, 0, (n1 + k + 1) * rise, M.shelf); }
+      const dh0 = ds + 0.25, full = (n1 + n2) * rise >= FL2 - 0.01;
+      const holes = [[0, 0.9, dh0, back]].concat(turn ? [[0.9, 0.9 + n2 * 0.25, back - 0.9, back]] : []);
+      const xs = full ? [...new Set([0, Wd, ...holes.flatMap(h => [h[0], h[1]])])].sort((p, q) => p - q) : [0, Wd];
+      const dsx = full ? [...new Set([T, back, ...holes.flatMap(h => [h[2], h[3]])])].sort((p, q) => p - q) : [T, back];
+      for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < dsx.length - 1; j++) {
+        const [x0, x1, d0, d1] = [xs[i], xs[i + 1], dsx[j], dsx[j + 1]];
+        if (x1 - x0 < 0.01 || d1 - d0 < 0.01) continue;
+        if (full && holes.some(h => h[0] <= x0 + 1e-6 && x1 <= h[1] + 1e-6 && h[2] <= d0 + 1e-6 && d1 <= h[3] + 1e-6)) continue;
+        bx(x0, x1, d0, d1, RH - 0.005, RH + 0.005, M.ceiling); bx(x0, x1, d0, d1, RH + 0.005, FL2, M.floor);
+      }
+      const sb = Ux(0.9);
       if (full) { wb(wall, ru0 - T, ru0, T, back + T, RH, UP, M.wall, ft.id); wb(wall, ru1, ru1 + T, T, back + T, RH, UP, M.wall, ft.id);
         wb(wall, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(far, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(wall, ru0, ru1, T, back, UP, UP + 0.02, M.ceiling, ft.id);
-        wb(wall, sb, sb + 0.05, dh0, dend, FL2 + 0.88, FL2 + 0.93, M.shelf, ft.id); }
+        bx(0.9, 0.95, dh0, turn ? back - 0.9 : back, FL2 + 0.88, FL2 + 0.93, M.shelf); }
     }
     if (kind === 'conservatory') wb(wall, cu - 0.45, cu + 0.45, T + rd * 0.55 - 0.45, T + rd * 0.55 + 0.45, 0, 0.72, M.shelf, ft.id);
-    const fl = { toilet: M.ceiling, conservatory: M.kfloor, porch: M.kfloor }[kind] || M.floor;
+    const fl = { toilet: M.ceiling, bathroom: M.ceiling, conservatory: M.kfloor, porch: M.kfloor }[kind] || M.floor;
     const a = w2(wall, ru0, T / 2), b = w2(wall, ru1, back);
     zones.push({ name: ft.id + '_room', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: fl, h: ['conservatory', 'hallway'].includes(kind) ? null : RH, fid: ft.id });
   };
