@@ -852,9 +852,15 @@ function beyondEditor(d, key, commit, fld) {
       outside: 'Opens straight onto the outside view.', dark: 'An unlit corridor.', closed: 'The door is shut.' }[by])];
   if (by === 'room') {
     d.room ||= { width: 3, depth: 3, window: true };
-    out.push(fld('Room width', 'width', 1.5, 8, 0.1, d.room), fld('Room depth', 'depth', 1.0, 6, 0.1, d.room),
+    const RT = { room: ['Room', 3, 3], toilet: ['Toilet', 1.3, 1.8], cupboard: ['Cupboard', 1.0, 0.8], conservatory: ['Conservatory', 3.4, 3.0], hallway: ['Hallway', 2.0, 4.0], porch: ['Porch', 1.8, 1.4] };
+    const kind = d.room.type || 'room';
+    out.push(row('Kind', radio(key + 'k', Object.entries(RT).map(([k, v]) => [k, v[0]]), kind, v => { d.room.type = v; d.room.width = RT[v][1]; d.room.depth = RT[v][2]; commit(); })),
+      el('p', { class: 'note' }, { room: 'An empty room: put furniture in it from Plan view.', toilet: 'A WC: toilet, basin and mirror, tiled walls and floor, a small frosted window if you tick Window.',
+        cupboard: 'A store cupboard: shelves, boxes, a basket and a broom; a dim light.', conservatory: 'Glass walls and roof on a low wall, a tiled floor, a table and chairs and plants; lit by the sky.',
+        hallway: 'A hall with stairs going up one side, a radiator, coat hooks and the front door at the far end.', porch: 'A small glazed porch: tiled floor, doormat, and the front door open to the outside.' }[kind]));
+    out.push(fld('Room width', 'width', 0.8, 8, 0.1, d.room), fld('Room depth', 'depth', 0.6, 6, 0.1, d.room),
       el('div', { class: 'row chks' },
-        el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall'),
+        ['room', 'toilet'].includes(kind) ? el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall') : null,
         el('label', {}, el('input', { type: 'checkbox', checked: d.room.lit !== false, onchange: e => { d.room.lit = e.target.checked; commit(); } }), ' Light on')));
   }
   return out;
@@ -944,19 +950,25 @@ function tabWalls(body) {
         // doors in the back wall of the alcove, to a corridor or another room
         const [a0, a1] = [+f.pos - +f.width / 2, +f.pos + +f.width / 2], leftEnd = f.wall === 'north' || f.wall === 'west';
         const ah = Math.min(+(f.height ?? spec.room.height), spec.room.height);
-        card.append(el('div', { class: 'row' }, el('b', {}, 'Doors in the back'),
+        card.append(el('div', { class: 'row' }, el('b', {}, 'Doors in the alcove'),
           el('button', { style: 'margin-left:auto', onclick: () => { f.doors ||= []; const w = Math.min(0.86, +f.width - 0.2);
             if (w < 0.6) { toast('The alcove is too narrow for a door: make it at least 0.8 m wide.', true); return; }
             if (ah < 2.0) { toast('The alcove needs to be full height (or at least 2 m) for a door.', true); return; }
             f.doors.push({ pos: r2(+f.pos), width: r2(w), height: Math.min(2.0, r2(ah - 0.1)), beyond: 'room', room: { width: 3, depth: 3, window: true } }); commit(); } }, '+ Door')));
         (f.doors || []).forEach((dd, k) => {
-          const dl = () => r2(leftEnd ? +dd.pos - a0 : a1 - +dd.pos), setDl = v => { const half = +dd.width / 2; v = Math.max(half, Math.min(+f.width - half, v)); dd.pos = r2(leftEnd ? a0 + v : a1 - v); };
+          const side = dd.side || 'back';
+          const dl = () => side === 'back' ? r2(leftEnd ? +dd.pos - a0 : a1 - +dd.pos) : r2(+dd.pos);
+          const setDl = v => { const half = +dd.width / 2;
+            if (side === 'back') { v = Math.max(half, Math.min(+f.width - half, v)); dd.pos = r2(leftEnd ? a0 + v : a1 - v); }
+            else dd.pos = r2(Math.max(half + 0.05, Math.min(+f.depth - half, v))); };
+          const setSide = v => { dd.side = v; if (v === 'back') dd.pos = r2(+f.pos); else { dd.width = Math.min(+dd.width, Math.max(0.6, +f.depth - 0.15)); dd.pos = r2(Math.min(+f.depth - +dd.width / 2, Math.max(+dd.width / 2 + 0.05, +f.depth / 2))); } commit(); };
           const sub = el('div', { class: 'card', style: 'margin:6px 0 0;padding:8px' },
             el('div', { class: 'head' }, el('b', {}, `Door ${k + 1}`),
               el('button', { class: 'danger', title: 'Remove', onclick: () => { f.doors.splice(k, 1); if (!f.doors.length) delete f.doors; commit(); } }, '✕')),
-            adv ? row('From left corner', numIn(dl(), 0.01, v => { setDl(v); commit(); }), el('span', { class: 'note' }, 'm to centre'))
-                : row('From left corner', ...slider(dl(), 0, +f.width, 0.05, v => { setDl(v); live(); }, v => { setDl(v); commit(); })),
-            fld('Width', 'width', 0.6, Math.max(0.65, +f.width - 0.1), 0.05, dd),
+            row('In the', radio(`${f.id}s${k}`, [['back', 'Back'], ['left', 'Left side'], ['right', 'Right side']], side, setSide)),
+            adv ? row(side === 'back' ? 'From left corner' : 'In from the front', numIn(dl(), 0.01, v => { setDl(v); commit(); }), el('span', { class: 'note' }, 'm to centre'))
+                : row(side === 'back' ? 'From left corner' : 'In from the front', ...slider(dl(), 0, side === 'back' ? +f.width : +f.depth, 0.05, v => { setDl(v); live(); }, v => { setDl(v); commit(); })),
+            fld('Width', 'width', 0.6, Math.max(0.65, (side === 'back' ? +f.width : +f.depth) - 0.1), 0.05, dd),
             fld('Height', 'height', 1.8, Math.max(1.85, ah - 0.05), 0.05, dd),
             ...beyondEditor(dd, `${f.id}d${k}`, commit, fld));
           card.append(sub);

@@ -452,22 +452,37 @@ export function buildRoom(spec, opts = {}) {
   // a wall frame parallel to a real wall but further out (the back of an alcove, the far wall of a room behind a door)
   const virtualWall = (wall, d, key) => { const f = walls[wall]; walls[key] = { ...f, line: f.line + f.sign * d, base: f.base || wall }; return key; };
   const baseOf = w => walls[w]?.base || w;
+  // which wall of an alcove a door is in ('back', or side 'a' low end / 'b' high end; people pick left/right facing the alcove)
+  const doorSide = (wall, dd) => { const sd = dd.side || 'back'; if (sd === 'back') return 'back';
+    const leftIsA = ['north', 'west'].includes(baseOf(wall)); return (sd === 'left') === leftIsA ? 'a' : 'b'; };
+  const sideFrame = (wall, ft, ab, depth, key) => {
+    const f = walls[wall], [u0, u1] = span(ft), axis = f.axis === 'x' ? 'y' : 'x';
+    const [line, sign] = ab === 'a' ? [u0, -1] : [u1, 1];
+    const base = { 'y-1': 'west', 'y1': 'east', 'x-1': 'south', 'x1': 'north' }[axis + sign];
+    const ends = [f.line, f.line + f.sign * depth].sort((p, q) => p - q);
+    walls[key] = { axis, line, sign, lo: ends[0], hi: ends[1], base, keep: [f.line + f.sign * (2 * T + 0.01), f.sign] }; return key;
+  };
 
   const recess = (ft, wall, depth, h, floorMat) => {
     const [u0, u1] = span(ft);
     const mlo = cornerMate(ft, 'lo'), mhi = cornerMate(ft, 'hi');
     const dlo = mlo ? fdepth(mlo) : 0, dhi = mhi ? fdepth(mhi) : 0;
     const AS = M.alcoveSet(ft);
-    const holes = (ft.doors || []).map(dd => [...span(dd), Math.min(+(dd.height ?? 2.0), h - 0.05)]);
+    const holes = (ft.doors || []).filter(dd => doorSide(wall, dd) === 'back').map(dd => [...span(dd), Math.min(+(dd.height ?? 2.0), h - 0.05)]);
+    const sholes = { a: [], b: [] };
+    for (const dd of ft.doors || []) { const sd = doorSide(wall, dd); if (sd !== 'back') sholes[sd].push([+dd.pos - +dd.width / 2, +dd.pos + +dd.width / 2, Math.min(+(dd.height ?? 2.0), h - 0.05)]); }
     for (const [a, b] of without(u0 - T - dlo, u1 + T + dhi, holes)) wb(wall, a, b, depth, depth + T, 0, RH, AS.wall, ft.id);
     for (const [h0, h1, dh] of holes) wb(wall, h0, h1, depth, depth + T, dh, RH, AS.wall, ft.id);
-    if (!mlo) wb(wall, u0 - T, u0, 0, depth + T, 0, RH, AS.wall, ft.id);
-    if (!mhi) wb(wall, u1, u1 + T, 0, depth + T, 0, RH, AS.wall, ft.id);
+    for (const [ab, mate, sa, sb] of [['a', mlo, u0 - T, u0], ['b', mhi, u1, u1 + T]]) {
+      if (mate) continue;
+      for (const [d0, d1] of without(0, depth + T, sholes[ab])) wb(wall, sa, sb, d0, d1, 0, RH, AS.wall, ft.id);
+      for (const [x0, x1, dh] of sholes[ab]) wb(wall, sa, sb, x0, x1, dh, RH, AS.wall, ft.id);
+    }
     if (AS.lowerFin && ft.type === 'alcove') {
       const H = Math.min(+(AS.lowerFin.height ?? (AS.lowerFin.type === 'panelling' ? 1.15 : 1.2)), RH - 0.3);
       for (const [a, b] of without(u0 - dlo, u1 + dhi, holes)) wb(wall, a, b, depth - 0.008, depth, 0, H, AS.lower, ft.id);
-      if (!mlo) wb(wall, u0, u0 + 0.008, -0.008, depth, 0, H, AS.lower, ft.id);
-      if (!mhi) wb(wall, u1 - 0.008, u1, -0.008, depth, 0, H, AS.lower, ft.id);
+      if (!mlo) for (const [x0, x1] of without(-0.008, depth, sholes.a)) wb(wall, u0, u0 + 0.008, x0, x1, 0, H, AS.lower, ft.id);
+      if (!mhi) for (const [x0, x1] of without(-0.008, depth, sholes.b)) wb(wall, u1 - 0.008, u1, x0, x1, 0, H, AS.lower, ft.id);
     }
     const zone = (p0, p1, name) => { const a = w2(wall, p0[0], p0[1]), b = w2(wall, p1[0], p1[1]);
       zones.push({ name, x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: floorMat || M.floor, h, fid: ft.id }); };
@@ -477,8 +492,8 @@ export function buildRoom(spec, opts = {}) {
     const trimRound = (t, z0, z1, wrap) => {
       for (const [a, b] of without(u0 - dlo, u1 + dhi, holes.filter(hh => z0 < hh[2]))) wb(wall, a, b, depth - t, depth, z0, z1, M.trim);
       const d0 = wrap ? -t : 0;
-      if (!mlo) wb(wall, u0, u0 + t, d0, depth, z0, z1, M.trim);
-      if (!mhi) wb(wall, u1 - t, u1, d0, depth, z0, z1, M.trim);
+      if (!mlo) for (const [x0, x1] of without(d0, depth, sholes.a.filter(hh => z0 < hh[2]))) wb(wall, u0, u0 + t, x0, x1, z0, z1, M.trim);
+      if (!mhi) for (const [x0, x1] of without(d0, depth, sholes.b.filter(hh => z0 < hh[2]))) wb(wall, u1 - t, u1, x0, x1, z0, z1, M.trim);
     };
     trimRound(0.018, 0, 0.12, true);
     trimRound(0.05, top - 0.05, top, full);
@@ -533,22 +548,54 @@ export function buildRoom(spec, opts = {}) {
     }
   };
   // another room through a door: walls, floor and ceiling, and a window on its far wall if asked for
+  const ROOM_TYPES = { room: [3, 3], toilet: [1.3, 1.8], cupboard: [1.0, 0.8], conservatory: [3.4, 3.0], hallway: [2.0, 4.0], porch: [1.8, 1.4] };
   const sideRoom = (ft, wall, u0, u1) => {
-    const rm = ft.room || {};
-    const rw = Math.max(u1 - u0 + 0.4, +(rm.width ?? 3)), rd = Math.max(1, +(rm.depth ?? 3)), rp = +(rm.pos ?? (u0 + u1) / 2);
-    const ru0 = Math.min(u0 - 0.2, rp - rw / 2), ru1 = Math.max(u1 + 0.2, rp + rw / 2), back = T + rd;
-    wb(wall, ru0 - T, ru0, T, back + T, 0, RH, M.wall, ft.id);
-    wb(wall, ru1, ru1 + T, T, back + T, 0, RH, M.wall, ft.id);
+    const rm = ft.room || {}, kind = rm.type || 'room', [dw, dd] = ROOM_TYPES[kind] || ROOM_TYPES.room;
+    const rw = Math.max(u1 - u0 + 0.3, +(rm.width ?? dw)), rd = Math.max(0.6, +(rm.depth ?? dd)), rp = +(rm.pos ?? (u0 + u1) / 2);
+    let ru0 = Math.min(u0 - 0.15, rp - rw / 2), ru1 = Math.max(u1 + 0.15, rp + rw / 2);
+    const keep = walls[wall].keep;                        // a door in an alcove's side wall: never back into the main room
+    if (keep) { const [lim, sg] = keep; const sh = sg > 0 ? Math.max(0, lim - ru0) : -Math.max(0, ru1 - lim); ru0 += sh; ru1 += sh; }
+    const back = T + rd, cu = (ru0 + ru1) / 2, glazed = kind === 'conservatory' || kind === 'porch';
+    const zd = kind === 'conservatory' ? 0.6 : 0.95, gtop = kind === 'conservatory' ? RH : Math.min(RH, 2.1);
+    const sideW = (a, b) => {
+      if (!glazed) { wb(wall, a, b, T, back + T, 0, RH, M.wall, ft.id); return; }
+      wb(wall, a, b, T, back + T, 0, zd, M.wall, ft.id); if (gtop < RH) wb(wall, a, b, T, back + T, gtop, RH, M.wall, ft.id);
+      wb(wall, a + (b - a) * 0.45, a + (b - a) * 0.55, T, back, zd, gtop, M.glass, ft.id);
+    };
+    sideW(ru0 - T, ru0); sideW(ru1, ru1 + T);
     for (const [a, b] of without(ru0, ru1, [[u0, u1]])) wb(wall, a, b, T, T + 0.02, 0, RH, M.wall, ft.id);
-    if (rm.window) {
-      const far = virtualWall(wall, back, `${wall}@${ft.id}_far`), ww = Math.min(1.6, rw - 0.8), wp = (ru0 + ru1) / 2;
-      for (const [a, b] of without(ru0 - T, ru1 + T, [[wp - ww / 2, wp + ww / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
-      wb(far, wp - ww / 2, wp + ww / 2, 0, T, 0, 0.85, M.wall, ft.id); wb(far, wp - ww / 2, wp + ww / 2, 0, T, 2.1, RH, M.wall, ft.id);
-      wb(far, wp - ww / 2, wp + ww / 2, T * 0.7, T * 0.72, 0.85, 2.1, M.glass, ft.id);
-    } else wb(wall, ru0 - T, ru1 + T, back, back + T, 0, RH, M.wall, ft.id);
+    const far = virtualWall(wall, back, `${wall}@${ft.id}_far`);
+    const hole = (w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[cu - w_ / 2, cu + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
+      wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, 0, z0, M.wall, ft.id); wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, cu - w_ / 2, cu + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
+    const sb = Math.min(ru0 + 0.9, ru1 - 0.6), ocu = kind === 'hallway' ? Math.min(ru1 - 0.5, Math.max(cu, sb + 0.5)) : cu;
+    const holeAt = (c, w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[c - w_ / 2, c + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
+      wb(far, c - w_ / 2, c + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, c - w_ / 2, c + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
+    if (kind === 'porch') hole(0.9, 0, 2.05, null);
+    else if (kind === 'hallway') holeAt(ocu, 0.9, 0, 2.05, M.door);
+    else if (kind === 'conservatory') { wb(far, ru0 - T, ru1 + T, 0, T, 0, zd, M.wall, ft.id); wb(far, ru0, ru1, T * 0.45, T * 0.55, zd, RH, M.glass, ft.id); }
+    else if (rm.window && kind !== 'cupboard') kind === 'toilet' ? hole(0.6, 1.35, 1.95, M.frosted) : hole(Math.min(1.6, rw - 0.8), 0.85, 2.1, M.glass);
+    else wb(far, ru0 - T, ru1 + T, 0, T, 0, RH, M.wall, ft.id);
+    if (kind === 'conservatory') wb(wall, ru0 - T, ru1 + T, T, back + T, RH - 0.01, RH, M.glass, ft.id);
+    // a few blocks so you can see what kind of room it is
+    if (kind === 'toilet') { wb(wall, cu - 0.19, cu + 0.19, back - 0.19, back, 0.42, 0.8, M.fridge, ft.id); wb(wall, cu - 0.17, cu + 0.17, back - 0.68, back - 0.19, 0, 0.42, M.fridge, ft.id);
+      if (rw >= 1.1) wb(wall, ru1 - 0.4, ru1, T + 0.25, T + 0.72, 0.8, 0.88, M.fridge, ft.id); }
+    if (kind === 'cupboard') for (const z of [0.9, 1.3, 1.7]) wb(wall, ru0, ru1, back - 0.38, back, z, z + 0.022, M.shelf, ft.id);
+    if (kind === 'hallway') {                               // stairs up through an opening in the ceiling to a landing
+      const FL2 = RH + 0.25, UP = FL2 + 2.4, ds = T + 0.5; let n = Math.max(1, Math.round(FL2 / 0.19)); const rise = FL2 / n; n = Math.min(n, Math.floor((back - ds) / 0.25));
+      for (let k = 0; k < n; k++) wb(wall, ru0, sb, ds + k * 0.25, back, k * rise, (k + 1) * rise, M.shelf, ft.id);
+      const dend = ds + n * 0.25, dh0 = ds + 0.25, full = n * rise >= FL2 - 0.01;
+      const pcs = full ? [[ru0, ru1, T, dh0], [sb, ru1, dh0, dend], [ru0, ru1, dend, back]] : [[ru0, ru1, T, back]];
+      for (const [a, b, d0, d1] of pcs) if (b - a > 0.01 && d1 - d0 > 0.01) { wb(wall, a, b, d0, d1, RH - 0.005, RH + 0.005, M.ceiling, ft.id); wb(wall, a, b, d0, d1, RH + 0.005, FL2, M.floor, ft.id); }
+      if (full) { wb(wall, ru0 - T, ru0, T, back + T, RH, UP, M.wall, ft.id); wb(wall, ru1, ru1 + T, T, back + T, RH, UP, M.wall, ft.id);
+        wb(wall, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(far, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(wall, ru0, ru1, T, back, UP, UP + 0.02, M.ceiling, ft.id);
+        wb(wall, sb, sb + 0.05, dh0, dend, FL2 + 0.88, FL2 + 0.93, M.shelf, ft.id); }
+    }
+    if (kind === 'conservatory') wb(wall, cu - 0.45, cu + 0.45, T + rd * 0.55 - 0.45, T + rd * 0.55 + 0.45, 0, 0.72, M.shelf, ft.id);
+    const fl = { toilet: M.ceiling, conservatory: M.kfloor, porch: M.kfloor }[kind] || M.floor;
     const a = w2(wall, ru0, T / 2), b = w2(wall, ru1, back);
-    zones.push({ name: ft.id + '_room', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: M.floor, h: RH, fid: ft.id });
+    zones.push({ name: ft.id + '_room', x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]), floor: fl, h: ['conservatory', 'hallway'].includes(kind) ? null : RH, fid: ft.id });
   };
+
 
   for (const ft of feats) {
     const wall = ft.wall; if (!walls[wall]) continue;
@@ -557,10 +604,13 @@ export function buildRoom(spec, opts = {}) {
       const depth = +(ft.depth ?? 0.6), h = Math.min(+(ft.height ?? RH), RH);
       recess(ft, wall, depth, h);
       if (h < RH - 0.01) wb(wall, u0, u1, 0, depth, h - 0.01, h, M.ceiling, ft.id);
-      (ft.doors || []).forEach((dd, k) => {                    // doors in the back of the alcove
-        const vw = virtualWall(wall, depth, `${wall}@${ft.id}`), w = walls[wall];
-        const cw = { hospital: 1.9, court: 2.2, custody: 1.6 }[spec.style] || 1.15, [d0, d1] = span(dd);
-        buildDoor({ ...dd, id: ft.id, type: 'door', wall: vw }, vw, [Math.min(Math.max(w.lo, u0 - 1.2), d0 - 0.2), Math.max(Math.min(w.hi, u1 + 1.2), d1 + 0.2), cw]);
+      (ft.doors || []).forEach((dd, k) => {                    // doors in the alcove's back or side walls
+        const sd = doorSide(wall, dd), w = walls[wall], cw = { hospital: 1.9, court: 2.2, custody: 1.6 }[spec.style] || 1.15;
+        let vw, dd2, lo, hi;
+        if (sd === 'back') { vw = virtualWall(wall, depth, `${wall}@${ft.id}`); dd2 = dd; lo = Math.max(w.lo, u0 - 1.2); hi = Math.min(w.hi, u1 + 1.2); }
+        else { vw = sideFrame(wall, ft, sd, depth, `${wall}@${ft.id}_${sd}`); dd2 = { ...dd, pos: w.line + w.sign * +dd.pos }; lo = walls[vw].lo; hi = walls[vw].hi; }
+        const [d0, d1] = span(dd2);
+        buildDoor({ ...dd2, id: ft.id, type: 'door', wall: vw }, vw, [Math.min(lo, d0 - 0.2), Math.max(hi, d1 + 0.2), cw]);
         const p0 = w2(vw, d0, -0.01), p1 = w2(vw, d1, T / 2 + 0.01);                     // floor through the doorway
         zones.push({ name: `${ft.id}_door${k}_sill`, x0: Math.min(p0[0], p1[0]), y0: Math.min(p0[1], p1[1]), x1: Math.max(p0[0], p1[0]), y1: Math.max(p0[1], p1[1]), floor: M.floor, h: Math.min(+(dd.height ?? 2), RH), fid: ft.id });
       });
@@ -616,8 +666,7 @@ export function buildRoom(spec, opts = {}) {
   for (const z of zones) {
     const fl = rectPlane(z.x0, z.y0, z.x1, z.y1, 0, z.floor, 'floor_' + z.name);
     fl.userData.isFloor = true; root.add(fl);
-    const ce = rectPlane(z.x0, z.y0, z.x1, z.y1, z.h, M.ceiling, 'ceiling_' + z.name);
-    ceilings.add(ce);
+    if (z.h) { const ce = rectPlane(z.x0, z.y0, z.x1, z.y1, z.h, M.ceiling, 'ceiling_' + z.name); ceilings.add(ce); }
   }
   root.add(ceilings);
   worldUVs(root);

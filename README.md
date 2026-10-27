@@ -55,9 +55,10 @@ Needs: Windows Python 3 (any recent version, standard library only) and Blender 
    also lights the room. Pick garden, street, hospital grounds, car park or upper floor; day / dusk / night follows the
    Light setting, and **Turn the view** swings it round until the right part shows through the windows. Photos download
    once into `textures/hdri/` (about 100 MB each at full quality).
-   **Doors in the back of an alcove** (Walls tab, on the alcove's card): alcoves can be up to 6 m deep, and each can have
-   doors in its back wall. Any door can open onto a corridor, **another room** (lit, decorated like this one, with an optional
-   window on its far wall; set its width and depth and put models in it), outside, darkness, or stay shut.
+   **Doors in alcoves** (Walls tab, on the alcove's card): alcoves can be up to 6 m deep, and each can have doors in its
+   back or side walls. Any door can open onto a corridor, outside, darkness, stay shut, or lead to **another room** of a
+   chosen kind: an empty room (put models in it), a toilet, a store cupboard, a conservatory (glass walls and roof), a
+   hallway (stairs up through the ceiling to a landing, and the front door) or a porch (front door open to outside).
    **Windows** can have blinds, curtains, nets + curtains or frosted glass. **Doors** open onto a corridor that suits the
    style (a ward corridor for hospital, a hallway with a front door for homes), straight outside, a dark corridor, or stay shut.
 4. **Views**: "centre" is where students stand. Add more (e.g. looking into the kitchen) for extra tablet buttons.
