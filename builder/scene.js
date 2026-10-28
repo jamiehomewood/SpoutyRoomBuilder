@@ -367,7 +367,14 @@ export function buildRoom(spec, opts = {}) {
   const ceilings = new THREE.Group(); ceilings.name = 'ceilings';
   const pick = [];                              // meshes that select a feature when clicked
   const zones = [{ name: 'main', x0: X0 - T / 2, y0: Y0 - T / 2, x1: X1 + T / 2, y1: Y1 + T / 2, floor: M.floor, h: RH }];
-  const feats = spec.features || [];
+  // an alcove that stops just short of a room corner would leave a thin stub of wall showing as an upright: take it to the corner
+  const feats = (spec.features || []).map(f => {
+    if (!['alcove', 'kitchenette'].includes(f.type) || !walls[f.wall]) return f;
+    const w = walls[f.wall]; let [a, b] = span(f);
+    if (a - w.lo > 0.001 && a - w.lo < 0.3) a = w.lo;
+    if (w.hi - b > 0.001 && w.hi - b < 0.3) b = w.hi;
+    return { ...f, pos: (a + b) / 2, width: b - a };
+  });
   const add = (o, featId) => { if (featId) { o.userData.featureId = featId; pick.push(o); } root.add(o); return o; };
   const wb = (wall, u0, u1, d0, d1, z0, z1, mat, fid) => add(boxBetween(w2(wall, u0, d0, z0), w2(wall, u1, d1, z1), mat), fid);
 
@@ -477,7 +484,8 @@ export function buildRoom(spec, opts = {}) {
     for (const [h0, h1, dh] of holes) wb(wall, h0, h1, depth, depth + T, dh, RH, AS.wall, ft.id);
     for (const [ab, mate, sa, sb] of [['a', mlo, u0 - T, u0], ['b', mhi, u1, u1 + T]]) {
       if (mate) continue;
-      for (const [d0, d1] of without(0, depth + T, sholes[ab])) wb(wall, sa, sb, d0, d1, 0, RH, AS.wall, ft.id);
+      const flush = ab === 'a' ? walls[wall].lo >= u0 - 0.001 : walls[wall].hi <= u1 + 0.001;   // in line with the room's side wall
+      for (const [d0, d1] of without(flush ? T : 0, depth + T, sholes[ab])) wb(wall, sa, sb, d0, d1, 0, RH, AS.wall, ft.id);
       for (const [x0, x1, dh] of sholes[ab]) wb(wall, sa, sb, x0, x1, dh, RH, AS.wall, ft.id);
     }
     if (AS.lowerFin && ft.type === 'alcove') {
