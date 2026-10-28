@@ -1,0 +1,34 @@
+{
+  "id": "up_patient_notes_clipboard",
+  "name": "Patient notes (clipboard)",
+  "file": "model.glb",
+  "thumb": "thumb.png",
+  "category": "misc",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "patient",
+    "notes",
+    "clipboard",
+    "uploaded"
+  ],
+  "status": "untested",
+  "notes": "Uploaded from patient_notes_clipboard.fbx.",
+  "scale": 1.0,
+  "polycount": 90,
+  "size": [
+    0.23,
+    0.325,
+    0.017
+  ],
+  "warnings": [],
+  "licence": {
+    "source": "Uploaded",
+    "author": "",
+    "licence": "Own upload (check you may use it)",
+    "credit_required": false,
+    "credit_line": ""
+  }
+}

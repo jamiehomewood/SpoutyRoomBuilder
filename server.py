@@ -21,7 +21,8 @@ CONFIG_FILE = os.path.join(ROOT, "config.json")
 QUEUE_FILE = os.path.join(JOBS, "queue.json")
 STATS_FILE = os.path.join(JOBS, "stats.json")
 GENERATOR = os.path.join(ROOT, "generator", "generate.py")
-for d in (CAT, LIB, ROOMS, JOBS): os.makedirs(d, exist_ok=True)
+TOURS = os.path.join(ROOT, "tours")          # Tour Builder: one JSON file per tour (rooms from the library + markers)
+for d in (CAT, LIB, ROOMS, JOBS, TOURS): os.makedirs(d, exist_ok=True)
 
 for ext, typ in {".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm", ".glb": "model/gltf-binary",
                  ".gltf": "model/gltf+json", ".json": "application/json", ".bin": "application/octet-stream"}.items():
@@ -296,6 +297,67 @@ def decal_remove(did):
     save_json(os.path.join(DECALS, "decals.json"), {"decals": keep})
     return {"ok": True}
 
+# ---- your own models (FBX, OBJ, GLB/glTF, STL, or a .zip with textures): Blender converts them to one GLB + thumbnail
+MODEL_EXT = (".fbx", ".glb", ".gltf", ".obj", ".stl")
+
+def catalogue_upload(h):
+    q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(h.path).query))
+    fname = re.sub(r"[^\w.\-]", "_", os.path.basename(q.get("filename", "") or "model")) or "model"
+    ext = os.path.splitext(fname)[1].lower()
+    if ext not in MODEL_EXT + (".zip",): raise ValueError("Upload an FBX, OBJ, GLB/glTF or STL file, or a .zip of the model with its textures.")
+    n = int(h.headers.get("Content-Length", 0) or 0)
+    if n <= 0: raise ValueError("The file was empty.")
+    if n > 500 * 1024 * 1024: raise ValueError("That file is over 500 MB.")
+    blender = CONFIG.get("blender")
+    if not blender or not os.path.exists(blender): raise RuntimeError("Blender isn't set up yet (Settings), and it's needed to convert models.")
+    work = os.path.join(JOBS, "upload_" + uuid.uuid4().hex[:8]); src_dir = os.path.join(work, "src"); os.makedirs(src_dir)
+    try:
+        src = os.path.join(src_dir, fname); left = n
+        with open(src, "wb") as f:
+            while left > 0:
+                chunk = h.rfile.read(min(1 << 20, left))
+                if not chunk: break
+                f.write(chunk); left -= len(chunk)
+        if left: raise ValueError("The upload stopped part way.")
+        if ext == ".zip":                                 # unpack, then use the first model file (FBX first)
+            with zipfile.ZipFile(src) as z:
+                for m in z.namelist():
+                    tgt = os.path.normpath(os.path.join(src_dir, m))
+                    if not tgt.startswith(os.path.normpath(src_dir) + os.sep): continue
+                    if m.endswith("/"): os.makedirs(tgt, exist_ok=True); continue
+                    os.makedirs(os.path.dirname(tgt), exist_ok=True)
+                    with z.open(m) as a, open(tgt, "wb") as b: shutil.copyfileobj(a, b)
+            found = {}
+            for r_, _, fs in os.walk(src_dir):
+                for f in fs:
+                    e = os.path.splitext(f)[1].lower()
+                    if e in MODEL_EXT and e not in found: found[e] = os.path.join(r_, f)
+            src = next((found[e] for e in MODEL_EXT if e in found), None)
+            if not src: raise ValueError("There's no FBX, OBJ, GLB/glTF or STL file in that zip.")
+        out = os.path.join(work, "out")
+        r = subprocess.run([blender, "-b", "--factory-startup", "-P", os.path.join(ROOT, "tools", "import_model.py"), "--", src, out],
+                           capture_output=True, text=True, timeout=600, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        info = load_json(os.path.join(out, "info.json"), None)
+        if not info: raise RuntimeError("Blender couldn't convert it. " + ((r.stdout or "") + (r.stderr or ""))[-300:])
+        if info.get("error"): raise RuntimeError("Blender couldn't convert it: " + info["error"])
+        name = (q.get("name") or os.path.splitext(fname)[0].replace("_", " ")).strip()[:60] or "Model"
+        base = "up_" + slug(name, 40).replace("-", "_"); mid = base; k = 2
+        while os.path.exists(os.path.join(CAT, mid)): mid = f"{base}_{k}"; k += 1
+        dst = os.path.join(CAT, mid); os.makedirs(dst)
+        shutil.move(os.path.join(out, "model.glb"), os.path.join(dst, "model.glb"))
+        if os.path.exists(os.path.join(out, "thumb.png")): shutil.move(os.path.join(out, "thumb.png"), os.path.join(dst, "thumb.png"))
+        words = [w for w in re.split(r"[^a-z0-9]+", name.lower()) if len(w) > 2]
+        meta = {"id": mid, "name": name, "file": "model.glb", "thumb": "thumb.png" if os.path.exists(os.path.join(dst, "thumb.png")) else "",
+                "category": q.get("category") or guess_category(name, words), "styles": ["modern", "neglected"], "tags": words + ["uploaded"],
+                "status": "untested", "notes": "Uploaded from " + os.path.basename(src) + ".", "scale": 1.0, "polycount": info.get("polycount"),
+                "size": info.get("size"), "warnings": info.get("warnings", []),
+                "licence": {"source": "Uploaded", "author": q.get("author", ""), "licence": "Own upload (check you may use it)",
+                            "credit_required": False, "credit_line": ""}}
+        save_json(os.path.join(dst, "model.json"), meta)
+        return meta
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
 def credits_for(model_ids):
     lines = ["# Credits", "", "Models used in this room and their licences.", ""]
     need, free = [], []
@@ -326,9 +388,79 @@ def library_list():
     for lid in sorted(os.listdir(LIB), reverse=True):
         if lid.startswith("_"): continue
         meta = load_json(os.path.join(LIB, lid, "meta.json"), None)
-        if meta: out.append(meta)
+        if meta:
+            spec = load_json(os.path.join(LIB, lid, "spec.json"), {})
+            meta["faces"] = {v.get("name"): v.get("yaw", 0) for v in spec.get("views", []) if isinstance(v, dict)}   # where each view's centre faces
+            out.append(meta)
     out.sort(key=lambda m: m.get("created", ""), reverse=True)
     return out
+
+# ---- turning a finished render sideways (a view rendered facing Left/Right lands 90 degrees out in the room)
+wrap180 = lambda a: ((float(a) + 180) % 360) - 180
+
+def library_turn(lid, view, by):
+    if not re.fullmatch(r"[\w\-]+", str(lid)) or not re.fullmatch(r"[\w\-]+", str(view)): raise ValueError("Unknown room or view")
+    by = int(by)
+    if by % 90: raise ValueError("Turn by 90, -90 or 180 degrees")
+    by = int(wrap180(by))
+    d = os.path.join(LIB, lid); meta = load_json(os.path.join(d, "meta.json"), None)
+    if meta is None or view not in (meta.get("views") or []): raise ValueError("That view isn't in the library")
+    if by == 0: return {"ok": True, "tours": []}
+    blender = CONFIG.get("blender")
+    if not blender or not os.path.exists(blender): raise RuntimeError("Blender isn't set up yet (Settings), and it's needed to turn pictures.")
+    keep = os.path.join(d, "_unturned"); os.makedirs(keep, exist_ok=True)            # the untouched originals, kept once
+    for f in (f"view_{view}.png", f"view_{view}.jpg", f"thumb_{view}.jpg"):
+        if os.path.exists(os.path.join(d, f)) and not os.path.exists(os.path.join(keep, f)): shutil.copy2(os.path.join(d, f), os.path.join(keep, f))
+    r = subprocess.run([blender, "-b", "--factory-startup", "-P", os.path.join(ROOT, "tools", "turn_view.py"), "--", d, view, str(by)],
+                       capture_output=True, text=True, timeout=600, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    ip = os.path.join(d, "turn_info.json"); info = load_json(ip, None)
+    try: os.remove(ip)
+    except OSError: pass
+    if not info: raise RuntimeError("Blender couldn't turn it. " + ((r.stdout or "") + (r.stderr or ""))[-300:])
+    if info.get("error"): raise RuntimeError("Blender couldn't turn it: " + info["error"])
+    spec = load_json(os.path.join(d, "spec.json"), {}); faces = 0
+    for v in spec.get("views", []):
+        if v.get("name") == view: v["yaw"] = faces = wrap180(float(v.get("yaw", 0)) - by)
+    save_json(os.path.join(d, "spec.json"), spec)
+    meta.setdefault("turned", {})[view] = wrap180(meta.get("turned", {}).get(view, 0) + by)
+    save_json(os.path.join(d, "meta.json"), meta)
+    try: os.remove(os.path.join(d, f"{lid}.zip"))                  # the download zip is made again next time
+    except OSError: pass
+    changed = []                                                   # tours that use this view: their markers move with the picture
+    for f in sorted(os.listdir(TOURS)):
+        if not f.endswith(".json"): continue
+        t = load_json(os.path.join(TOURS, f), None); touched = False
+        if not isinstance(t, dict): continue
+        for room in t.get("rooms") or []:
+            if room.get("lib") == lid and (room.get("view") or "centre") == view:
+                for m in room.get("markers") or []:
+                    if "yaw" in m: m["yaw"] = round(wrap180(float(m["yaw"]) + by), 2); touched = True
+        if touched: save_json(os.path.join(TOURS, f), t); changed.append(t.get("name", f[:-5]))
+    return {"ok": True, "faces": faces, "tours": changed}
+
+def tour_list():
+    out = []
+    for f in sorted(os.listdir(TOURS)):
+        if not f.endswith(".json"): continue
+        fp = os.path.join(TOURS, f); t = load_json(fp, {})
+        rooms = t.get("rooms") or []
+        first = next((r for r in rooms if r.get("id") == t.get("start")), rooms[0] if rooms else None)
+        out.append({"id": f[:-5], "name": t.get("name", f[:-5]), "description": t.get("description", ""), "rooms": len(rooms),
+                    "saved": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(fp))),
+                    "thumb": f"/library/{first['lib']}/thumb_{first.get('view', 'centre')}.jpg" if first and first.get("lib") else ""})
+    out.sort(key=lambda t: t["saved"], reverse=True)
+    return out
+
+def tour_save(data):
+    tour = data.get("tour")
+    if not isinstance(tour, dict): raise ValueError("no tour")
+    tid = str(data.get("id") or "")
+    if not re.fullmatch(r"[\w\-]+", tid):                      # a new tour: name it after its title, never overwrite another
+        base = slug(tour.get("name", "tour")) or "tour"; tid = base; n = 2
+        while os.path.exists(os.path.join(TOURS, tid + ".json")): tid = f"{base}-{n}"; n += 1
+    tour["id"] = tid
+    save_json(os.path.join(TOURS, tid + ".json"), tour)
+    return {"id": tid}
 
 def library_zip(lid):
     d = os.path.join(LIB, lid); zp = os.path.join(d, f"{lid}.zip")
@@ -521,7 +653,8 @@ class Handler(SimpleHTTPRequestHandler):
         sys.stderr.write("%s  %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-store" if self.path.startswith(("/api/", "/builder/")) else "max-age=300")
+        # library pictures can be turned in place, so browsers check they're current (cheap: unchanged files answer 304)
+        self.send_header("Cache-Control", "no-store" if self.path.startswith(("/api/", "/builder/")) else "no-cache" if self.path.startswith("/library/") else "max-age=300")
         super().end_headers()
 
     def send_json(self, data, code=200):
@@ -603,6 +736,11 @@ class Handler(SimpleHTTPRequestHandler):
                     if j["status"] == "queued": j["ahead"] = queue_ahead_seconds(j["id"])
                 return self.send_json(jobs)
             if path == "/api/library": return self.send_json(library_list())
+            if path == "/api/tours": return self.send_json(tour_list())
+            m = re.fullmatch(r"/api/tours/([\w\-]+)", path)
+            if m:
+                t = load_json(os.path.join(TOURS, m.group(1) + ".json"), None)
+                return self.send_json(t) if t else self.fail("not found", 404)
             m = re.fullmatch(r"/api/library/([\w\-]+)/download\.zip", path)
             if m:
                 zp = library_zip(m.group(1))
@@ -625,6 +763,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         try:
+            if path == "/api/catalogue/upload": return self.send_json(catalogue_upload(self))   # raw file body, not JSON
             data = self.read_json()
             if path == "/api/live":
                 with live_lock:
@@ -650,6 +789,14 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/rooms":
                 spec = data["spec"]; rid = slug(spec.get("name", "room"))
                 save_json(os.path.join(ROOMS, rid + ".json"), spec); return self.send_json({"id": rid})
+            if path == "/api/tours": return self.send_json(tour_save(data))
+            m = re.fullmatch(r"/api/tours/([\w\-]+)/remove", path)
+            if m:                                   # kept in tours/_removed, not deleted
+                src = os.path.join(TOURS, m.group(1) + ".json")
+                if os.path.exists(src):
+                    os.makedirs(os.path.join(TOURS, "_removed"), exist_ok=True)
+                    shutil.move(src, os.path.join(TOURS, "_removed", f"{m.group(1)}-{time.strftime('%Y%m%d-%H%M%S')}.json"))
+                return self.send_json({"ok": True})
             if path == "/api/estimate":
                 spec = data["spec"]; qual = data.get("quality", "standard")
                 avg, count = history_avg(qual)
@@ -680,6 +827,8 @@ class Handler(SimpleHTTPRequestHandler):
                 for k in ("name", "notes"):
                     if k in data: meta[k] = data[k]
                 save_json(p, meta); return self.send_json(meta)
+            m = re.fullmatch(r"/api/library/([\w\-]+)/turn", path)
+            if m: return self.send_json(library_turn(m.group(1), data.get("view"), data.get("by", 0)))
             m = re.fullmatch(r"/api/library/([\w\-]+)/remove", path)
             if m:
                 src = os.path.join(LIB, m.group(1))

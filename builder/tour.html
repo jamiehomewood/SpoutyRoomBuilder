@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tour</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: "Segoe UI", system-ui, sans-serif; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #fx { cursor: pointer; }
+  #gl { pointer-events: none; }
+  body.look #bg, body.look #fx, body.look #gl { display: none; }
+  #msg { position: absolute; left: 12px; bottom: 10px; font: 16px system-ui, sans-serif; color: #888; pointer-events: none; }
+  #help { position: absolute; bottom: 10px; right: 12px; color: #9aa3ad; font-size: 12px; background: rgba(21, 23, 26, .75); padding: 4px 8px; border-radius: 6px; display: none; }
+  body.look #help { display: block; }
+</style>
+</head>
+<body>
+<!-- Tour player: a Tour Builder tour (Room Builder library rooms joined up by markers).
+     tour.html?tour=<id>             the 360 output: the equirect fills the window (Spouty / ICE web layer, use a 2:1 layer)
+     tour.html?tour=<id>&look=1      drag-to-look viewer, for checking a tour on a laptop (Room Builder only)
+     &room=<room id>  start in that room      &sound=0  no sounds
+     Served by Room Builder (/builder/tour.html) for previews, and by the scene server (/rbtour.html) in the room, where
+     the tablet (control.html) gets the room's markers, questions and a tap-the-picture view through remote.js.
+     Room PC keys: 1-9 answer, Enter = continue/close, Esc = close, Backspace = back, type a code then Enter. -->
+<canvas id="bg"></canvas><canvas id="gl"></canvas><canvas id="fx"></canvas>
+<div id="msg"></div>
+<div id="help">Drag to look round · click markers · wheel to zoom</div>
+<script>
+  // three.js for the 3D objects: Room Builder serves it at /vendor, the scene server at /rb-static/vendor
+  (function () {
+    const b = location.pathname.startsWith('/builder/') ? '/' : '/rb-static/';
+    const s = document.createElement('script'); s.type = 'importmap';
+    s.textContent = JSON.stringify({ imports: { three: b + 'vendor/three/build/three.module.js', 'three/addons/': b + 'vendor/three/jsm/' } });
+    document.currentScript.after(s);
+  })();
+</script>
+<script>
+(async function () {
+  const Q = new URLSearchParams(location.search);
+  const TOUR_ID = (Q.get('tour') || '').replace(/[^\w\-]/g, '');
+  const RB = location.pathname.startsWith('/builder/');          // Room Builder's server; otherwise the scene server
+  const LOOK = Q.get('look') === '1' && RB;
+  const SOUND = Q.get('sound') !== '0';
+  const $ = (id) => document.getElementById(id);
+  const msg = (t) => { $('msg').textContent = t || ''; };
+  const now = () => performance.now();
+  const imgUrl = (r) => (RB ? '/library/' : '/rb/') + r.lib + '/view_' + (r.view || 'centre') + '.jpg';
+  const BASE = RB ? '/' : '/rb-static/';                          // where catalogue/ and vendor/ are on this server
+
+  let T;
+  try {
+    const res = await fetch((RB ? '/api/tours/' : '/api/rbtour/') + TOUR_ID, { cache: 'no-store' });
+    T = await res.json();
+    if (!res.ok || T.error) throw new Error(T.error || res.status);
+  } catch (e) { msg('Could not load the tour "' + TOUR_ID + '": ' + e.message); return; }
+  T.rooms = T.rooms || []; T.items = T.items || [];
+  document.title = T.name || 'Tour';
+  if (!T.rooms.length) { msg('This tour has no rooms yet'); return; }
+
+  const roomById = (id) => T.rooms.find((r) => r.id === id);
+  const itemName = (id) => (T.items.find((i) => i.id === id) || {}).name || 'an item';
+  const markerById = (id) => { for (const r of T.rooms) for (const m of r.markers || []) if (m.id === id) return m; return null; };
+  const LETTERS = 'ABCDEFGHI';
+  // catalogue entries (model.json) for the items that have a 3D model
+  const MODELS = {};
+  await Promise.all([...new Set(T.items.map((i) => i.model).filter(Boolean))].map(async (id) => {
+    try { MODELS[id] = await (await fetch(BASE + 'catalogue/models/' + encodeURIComponent(id) + '/model.json', { cache: 'no-store' })).json(); } catch (e) {}
+  }));
+  const itemOf = (id) => T.items.find((i) => i.id === id);
+  const modelOf = (id) => { const it = itemOf(id); return it && it.model && MODELS[it.model] ? it.model : null; };
+  const thumbOf = (id) => { const mid = modelOf(id), m = mid && MODELS[mid]; return m && m.thumb ? `${BASE}catalogue/models/${encodeURIComponent(mid)}/${m.thumb}` : ''; };
+  const has3d = (m) => m.type === 'item' && m.show3d !== false && !!modelOf(m.item);
+  const pagesOf = (id) => { const it = itemOf(id) || {}; return (it.pages || []).filter((x) => String(x).trim()); };
+  const WALLS = { front: 0, right: 90, back: 180, left: -90 };
+  const wallOf = (yaw) => { const w = Math.round(yaw / 90) * 90; return w === -180 ? 180 : w; };   // cards sit in the middle of a wall
+  const wrap180 = (a) => ((a + 540) % 360) - 180;
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+  // ------------------------------------------------------------------ state
+  const loadedAt = now();
+  let S;
+  function fresh() {
+    S = { room: null, history: [], items: new Set(), found: new Set(), taken: new Set(), unlocked: new Set(), answers: {},
+          visited: new Set(), introSeen: new Set(), score: { asked: 0, right: 0 }, card: null, toast: null, titleUntil: 0, typed: '',
+          sel: null, insp: null, inspN: 0, rot: { rx: 0, ry: 0, zoom: 1 }, page: 0, usedFirst: new Set() };
+  }
+  fresh();
+  const visible = (m) => (!m.hidden || S.found.has(m.id)) && !S.taken.has(m.id);
+  const locked = (m) => m.type === 'go' && (((m.requires || []).some((i) => !S.items.has(i))) || (m.code && !S.unlocked.has(m.id)));
+
+  // ------------------------------------------------------------------ canvases (everything is drawn in 0.1 degree units: 3600 x 1800)
+  const bg = $('bg'), fx = $('fx'), bgc = bg.getContext('2d'), c = fx.getContext('2d');
+  let W = 0, H = 0, bgDirty = true, bright = 0, curImg = null;
+  function size() {
+    if (LOOK) { W = 4096; H = 2048; }
+    else { const dpr = Math.min(devicePixelRatio || 1, 2); W = Math.min(8192, Math.round(innerWidth * dpr)); H = Math.round(innerHeight * dpr); }
+    if (bg.width !== W || bg.height !== H) { bg.width = fx.width = W; bg.height = fx.height = H; }
+    bgDirty = true;
+  }
+  addEventListener('resize', size); size();
+
+  // live 3D objects (items with a model): drawn into the 360 picture on their own canvas, between the render and the markers
+  const gl = $('gl'); let t3 = null;
+  try {
+    const mod = await import(BASE + 'builder/tour3d.js');
+    t3 = mod.createTour3D({ canvas: gl, base: BASE, onLoad: () => changed() });
+    t3.setSize(W, H); addEventListener('resize', () => t3.setSize(W, H));
+  } catch (e) { console.error('3D objects are off:', e); }
+  const eyeOf = (r) => (r && r.dims && +r.dims.eye) || 1.12;
+  function wallDist(r, yaw) {
+    const d = (r && r.dims) || {}, hw = (d.w || 6.4) / 2, hd = (d.d || 5.71) / 2, a = yaw * Math.PI / 180;
+    const sx = Math.abs(Math.sin(a)), cy = Math.abs(Math.cos(a));
+    return Math.min(sx > 1e-6 ? hw / sx : 1e9, cy > 1e-6 ? hd / cy : 1e9);
+  }
+  const baseH = (r, m) => m.h != null && m.h !== '' ? +m.h : eyeOf(r) + (+m.dist || 1.5) * Math.tan(m.pitch * Math.PI / 180);
+  function sync3d() {
+    if (!t3) return;
+    const r = roomById(S.room);
+    t3.sync(r ? (r.markers || []).filter((m) => has3d(m) && !S.taken.has(m.id) && m.id !== S.holding).map((m) => ({ key: m.id, model: modelOf(m.item), yaw: m.yaw,
+      dist: +m.dist || 1.5, h: baseH(r, m), eye: eyeOf(r), turn: +m.turn || 0, size: +m.size || 1 })) : []);
+    const mid = S.insp && modelOf(S.insp);
+    if (r && mid) {
+      const yaw = S.inspYaw ?? (WALLS[r.cardWall] ?? 0);                // held up on the wall its marker is on, under the card
+      t3.setInspect({ model: mid, yaw, dist: wallDist(r, yaw) - 0.35, y: -0.3, fit: 0.7, rx: S.rot.rx, ry: S.rot.ry, zoom: S.rot.zoom });
+    } else t3.setInspect(null);
+    // what you carry: a strip lying on the floor, parallel to the card wall, 60 cm in from it
+    if (r && S.items.size && t3.setFloorText) {
+      const home = WALLS[r.cardWall] ?? 0, half = wallDist(r, home);
+      const along = home % 180 === 0 ? (+(r.dims && r.dims.w) || 6.4) : (+(r.dims && r.dims.d) || 5.71);   // that wall's length
+      t3.setFloorText({ text: 'Carrying: ' + [...S.items].map(itemName).join(' · '), yaw: home, dist: half - 0.6, eye: eyeOf(r), maxW: along * 0.7 });
+    } else if (t3 && t3.setFloorText) t3.setFloorText(null);
+  }
+
+  const cache = {};
+  function loadImg(r) {
+    const u = imgUrl(r);
+    if (!cache[u]) cache[u] = new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not load ' + u)); i.src = u; });
+    return cache[u];
+  }
+
+  // ------------------------------------------------------------------ sounds (made on the fly, no files)
+  let actx = null;
+  function sound(kind) {
+    if (!SOUND) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const notes = { yes: [[660, 0], [880, .12]], no: [[220, 0], [180, .16]], tick: [[740, 0]], door: [[180, 0], [140, .1]] }[kind] || [];
+      for (const [f, t0] of notes) {
+        const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + t0;
+        o.type = kind === 'door' ? 'triangle' : 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(kind === 'door' ? 0.12 : 0.18, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === 'door' ? 0.5 : 0.3));
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.6);
+      }
+    } catch (e) {}
+  }
+  addEventListener('pointerdown', () => { if (actx && actx.state === 'suspended') actx.resume(); });
+
+  // ------------------------------------------------------------------ moving between rooms (dip to black)
+  let busy = false;
+  function fadeTo(target, ms) {
+    return new Promise((res) => {
+      const from = bright, t0 = now();
+      (function step() {
+        const k = Math.min(1, (now() - t0) / ms);
+        bright = from + (target - from) * k; bgDirty = true;
+        if (k < 1) setTimeout(step, 16); else res();         // a timer, not animation frames: a hidden page must not get stuck mid-fade
+      })();
+    });
+  }
+  async function goTo(id, opt = {}) {
+    const r = roomById(id);
+    if (!r) { toast('That room is missing from the tour'); return; }
+    if (busy) return;
+    busy = true; S.card = null; S.typed = ''; S.toast = null;
+    const p = loadImg(r).catch((e) => { msg(e.message); return null; });
+    if (curImg) { sound('door'); await fadeTo(0, 450); }
+    const im = await p;
+    if (!opt.back && !opt.fresh && S.room && S.room !== id) S.history.push(S.room);
+    S.room = id; curImg = im; S.visited.add(id); S.titleUntil = now() + 4500; bgDirty = true;
+    S.insp = null; S.holding = null; if (t3) { t3.setRoom(imgUrl(r)); } sync3d();
+    if (im) msg('');
+    await fadeTo(1, 550);
+    busy = false;
+    if (r.end) S.card = { kind: 'end', yaw: WALLS[r.cardWall] ?? 0, title: r.name || 'The end', text: endText(r) };
+    else if (r.intro && !S.introSeen.has(id)) { S.introSeen.add(id); S.card = { kind: 'intro', yaw: WALLS[r.cardWall] ?? 0, title: r.name || '', text: r.intro }; }
+    changed();
+    for (const m of r.markers || []) if (m.type === 'go' && roomById(m.target)) loadImg(roomById(m.target)).catch(() => {});   // next rooms ready
+  }
+  function endText(r) {
+    const bits = [r.endText || 'You have reached the end of the tour.', ''];
+    bits.push(`Rooms visited: ${S.visited.size} of ${T.rooms.length}`);
+    if (S.score.asked) bits.push(`Right first time (questions and tasks): ${S.score.right} of ${S.score.asked}`);
+    if (S.items.size) bits.push('Found: ' + [...S.items].map(itemName).join(', '));
+    return bits.join('\n');
+  }
+  function back() { if (S.history.length && !busy) goTo(S.history.pop(), { back: true }); }
+  function restart() { fresh(); curImg = null; bright = 0; bgDirty = true; goTo(startId, { fresh: true }); }
+
+  // ------------------------------------------------------------------ what markers do
+  let toastT = 0;
+  function toast(text, yaw) {
+    const r = roomById(S.room) || {};
+    S.toast = { text, yaw: yaw == null ? (WALLS[r.cardWall] ?? 0) : wallOf(yaw), until: now() + 3500 };
+    clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; changed(); }, 3600);
+    changed();
+  }
+  function activate(m) {
+    if (!m || busy) return;
+    const r = roomById(S.room);
+    if (!r || !(r.markers || []).includes(m)) return;                    // only markers in the room we're in
+    const wasHidden = m.hidden && !S.found.has(m.id);
+    if (m.hidden) S.found.add(m.id);
+    if (S.taken.has(m.id)) return;
+    const yaw = wallOf(m.yaw);
+    S.typed = '';
+    if (m.type === 'go') {
+      const missing = (m.requires || []).filter((i) => !S.items.has(i));
+      if (missing.length) { sound('no'); toast(m.lockedText || 'Locked. You need: ' + missing.map(itemName).join(', '), m.yaw); return; }
+      if (m.code && !S.unlocked.has(m.id)) {
+        sound('tick'); S.card = { kind: 'code', mid: m.id, yaw, title: m.label || 'Locked', text: m.codePrompt || (RB ? 'Type the code.' : 'Enter the code on the tablet.') };
+      } else if (!roomById(m.target)) { toast('This doesn\'t lead anywhere yet', m.yaw); return; }
+      else { goTo(m.target); return; }
+    } else if (m.type === 'info') {
+      sound(wasHidden ? 'yes' : 'tick'); S.card = { kind: 'info', mid: m.id, yaw, title: m.title || m.label || 'Information', text: m.text || '' };
+    } else if (m.type === 'question') {
+      sound(wasHidden ? 'yes' : 'tick');
+      const done = has(S.answers, m.id) && !m.retry;
+      S.card = { kind: 'question', mid: m.id, yaw, title: m.label || 'Question', text: m.text || '', options: (m.options || []).map((o) => o.text || ''),
+                 choice: done ? S.answers[m.id] : null, feedback: done ? feedbackFor(m, S.answers[m.id]) : '' };
+    } else if (m.type === 'item' && m.take === 'choose') {               // students choose: hold it up, then "Take it" or "Put it back"
+      sound(wasHidden ? 'yes' : 'tick'); inspect(m.item, m.text || '', m.id, true, m.yaw); return;
+    } else if (m.type === 'item' && m.take === false) {                  // look only: hold it up, then put it back where it was
+      sound(wasHidden ? 'yes' : 'tick');
+      const it = itemOf(m.item) || {};
+      if (m.item && (modelOf(m.item) || pagesOf(m.item).length || it.description || m.text)) { inspect(m.item, m.text || '', m.id, false, m.yaw); return; }
+      toast(itemName(m.item), m.yaw); return;
+    } else if (m.type === 'item') {
+      S.taken.add(m.id); sound('yes');
+      if (m.item) { S.items.add(m.item); S.sel = m.item; }
+      const it = itemOf(m.item) || {};
+      if (m.item && (modelOf(m.item) || pagesOf(m.item).length || it.description)) { inspect(m.item, m.text || '', null, false, m.yaw); return; }
+      if (m.text) S.card = { kind: 'found', mid: m.id, yaw, title: 'Found: ' + itemName(m.item), text: m.text };
+      else toast('Found: ' + itemName(m.item), m.yaw);
+    } else if (m.type === 'use') {                                     // a person or place that takes items (give the notes to the doctor)
+      sound('tick'); useCard(m);
+    }
+    changed();
+  }
+
+  // ------------------------------------------------------------------ the bag: look at, read and give items
+  // lookAt = the marker id when it is only being looked at (not taken): its model leaves the room while it's held, then goes back
+  // at = the marker's yaw: the object pops up on that wall (near where it was, kept on the wall); from the bag: the card wall
+  function inspect(itemId, foundText, lookAt, choose, at) {
+    const r = roomById(S.room) || {}, home = WALLS[r.cardWall] ?? 0;
+    const wall = at == null ? home : wallOf(at);
+    S.inspYaw = at == null ? wall : wall + Math.max(-25, Math.min(25, wrap180(at - wall)));
+    S.insp = itemId; if (!lookAt) S.sel = itemId; S.holding = lookAt || null; S.inspN++; S.rot = { rx: 0, ry: 0, zoom: 1 }; S.page = 0;
+    // with a model the card goes high and wide across the top of the same wall, out of the way of the object below it
+    S.card = { kind: 'inspect', item: itemId, look: !!lookAt, choose: !!(lookAt && choose), yaw: wall, w: modelOf(itemId) ? 700 : 580, high: !!modelOf(itemId),
+               title: (foundText != null && !lookAt ? 'Found: ' : '') + itemName(itemId), found: foundText || '' };
+    S.card.text = inspectText(S.card);
+    changed();
+  }
+  function inspectText(cd) {
+    const it = itemOf(cd.item) || {}, pages = pagesOf(cd.item);
+    const body = pages.length ? pages[Math.min(S.page, pages.length - 1)] : (it.description || '');
+    return [cd.found, body].filter(Boolean).join('\n\n');
+  }
+  function turnPage(d) {
+    const cd = S.card, n = cd && cd.kind === 'inspect' ? pagesOf(cd.item).length : 0; if (n < 2) return;
+    S.page = Math.max(0, Math.min(n - 1, S.page + d)); cd.found = ''; cd.text = inspectText(cd); sound('tick'); changed();
+  }
+  function useCard(m) {
+    const r = roomById(S.room) || {}, carried = [...S.items];
+    S.card = { kind: 'use', mid: m.id, yaw: wallOf(m.yaw), title: m.label || 'Give or use', text: (m.text || '') + (carried.length ? '' : (m.text ? '\n\n' : '') + 'You have nothing to give yet.'),
+               options: carried.map((i) => 'Give: ' + itemName(i)), optItems: carried, choice: null };
+    changed();
+  }
+  function give(mid, itemId) {
+    const m = markerById(mid), r = roomById(S.room);
+    if (!m || !r || !(r.markers || []).includes(m) || !S.items.has(itemId) || busy) return;
+    const acc = (m.accepts || []).find((a) => a.item === itemId), scoredUse = (m.accepts || []).some((a) => a.correct);
+    if (scoredUse && !S.usedFirst.has(mid)) { S.usedFirst.add(mid); S.score.asked++; if (acc && acc.correct) S.score.right++; }
+    const good = acc ? (!!acc.correct || !scoredUse) : false;
+    if (acc && acc.consume) { S.items.delete(itemId); if (S.sel === itemId) S.sel = null; }
+    if (acc && acc.give) { S.items.add(acc.give); S.sel = acc.give; }
+    if (S.insp === itemId || (acc && acc.consume)) S.insp = null;
+    S.card = { kind: 'useResult', mid, yaw: wallOf(m.yaw), title: `${m.label || 'Give or use'}: ${itemName(itemId)}`, good,
+               text: acc ? (acc.feedback || (good ? 'That\'s right.' : 'Not quite.')) : (m.wrongText || 'That isn\'t what\'s needed here.'),
+               go: acc && acc.go && roomById(acc.go) ? acc.go : null };
+    sound(good ? 'yes' : 'no');
+    changed();
+  }
+  const scored = (m) => (m.options || []).some((o) => o.correct);
+  function feedbackFor(m, i) {
+    const o = (m.options || [])[i] || {};
+    return o.feedback || (scored(m) ? (o.correct ? 'Correct.' : 'Not quite.') : '');
+  }
+  function answer(i) {
+    const cd = S.card; if (!cd || cd.kind !== 'question' || cd.choice != null) return;
+    const m = markerById(cd.mid), o = m && (m.options || [])[i]; if (!o) return;
+    if (!has(S.answers, m.id) && scored(m)) { S.score.asked++; if (o.correct) S.score.right++; }
+    S.answers[m.id] = i; cd.choice = i; cd.feedback = feedbackFor(m, i);
+    if (o.give) S.items.add(o.give);
+    sound(scored(m) ? (o.correct ? 'yes' : 'no') : 'tick');
+    changed();
+  }
+  function cardButton() {                         // Continue / Close
+    const cd = S.card; if (!cd) return;
+    if (cd.kind === 'end') return;
+    if (cd.kind === 'useResult') { S.card = null; changed(); if (cd.go) goTo(cd.go); return; }
+    if (cd.kind === 'inspect') { closeCard(); return; }
+    if (cd.kind === 'question') {
+      if (cd.choice == null) return;
+      const m = markerById(cd.mid), o = (m.options || [])[cd.choice] || {};
+      if (scored(m) && !o.correct && m.retry) { cd.choice = null; cd.feedback = ''; changed(); return; }
+      S.card = null; changed();
+      if (o.go && roomById(o.go)) goTo(o.go);
+      return;
+    }
+    S.card = null; S.typed = ''; changed();
+  }
+  // "Let students choose": they take what they're holding instead of putting it back
+  function takeHeld() {
+    const cd = S.card, m = S.holding && markerById(S.holding);
+    if (!cd || cd.kind !== 'inspect' || !cd.choose || !m) return;
+    S.taken.add(m.id); if (m.item) { S.items.add(m.item); S.sel = m.item; }
+    S.insp = null; S.holding = null; S.card = null; sound('yes');
+    toast('In your bag: ' + itemName(m.item), m.yaw);
+  }
+  function closeCard() { if (S.card && S.card.kind !== 'end') { if (S.card.kind === 'inspect') { S.insp = null; S.holding = null; } S.card = null; S.typed = ''; changed(); } }
+  const chooseOption = (i) => { const cd = S.card; if (!cd) return; if (cd.kind === 'use') { if (cd.optItems[i]) give(cd.mid, cd.optItems[i]); } else answer(i); };
+  const normCode = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  function tryCode(v) {
+    const cd = S.card; if (!cd || cd.kind !== 'code') return;
+    const m = markerById(cd.mid); if (!m) return;
+    if (normCode(v) && normCode(v) === normCode(m.code)) {
+      S.unlocked.add(m.id); S.card = null; S.typed = ''; sound('yes'); toast('Unlocked', m.yaw);
+      setTimeout(() => goTo(m.target), 900);
+    } else { sound('no'); cd.error = 'That code doesn\'t work. Try again.'; S.typed = ''; changed(); }
+  }
+
+  // ------------------------------------------------------------------ hit testing (angles)
+  function markerAt(yaw, pitch) {
+    const r = roomById(S.room); if (!r) return null;
+    let best = null, bd = 1e9;
+    for (const m of r.markers || []) {
+      if (S.taken.has(m.id)) continue;
+      const hiddenNow = m.hidden && !S.found.has(m.id);
+      const at = spot(m);
+      const rad = at.rad || (hiddenNow ? (m.radius || 6) : Math.max(4.5, m.radius || 0));
+      const d = Math.hypot(wrap180(yaw - at.yaw) * Math.cos(pitch * Math.PI / 180), pitch - at.pitch);
+      if (d <= rad && d < bd) { best = m; bd = d; }
+    }
+    return best;
+  }
+  // where a marker is: a 3D object's middle (once loaded), otherwise the marker point
+  function spot(m) {
+    const h = has3d(m) && t3 ? t3.hit(m.id) : null;
+    return h ? { yaw: h.yaw, pitch: h.pitch, rad: Math.max(h.rad, m.hidden ? (m.radius || 0) : 0) } : { yaw: m.yaw, pitch: m.pitch, rad: 0 };
+  }
+  function tapAngles(yaw, pitch) { const m = markerAt(yaw, pitch); if (m) activate(m); }
+  function tapVirtual(vx, vy) {                     // a click on the projected picture (0.1 degree units)
+    const cd = S.card;
+    if (cd && cd.rects) {
+      for (const ox of [0, -3600, 3600]) for (const h of cd.rects) {
+        const x = vx - ox;
+        if (x >= h.x && x <= h.x + h.w && vy >= h.y && vy <= h.y + h.h) {
+          if (h.opt != null) chooseOption(h.opt); else if (h.btn) cardButton();
+          return;
+        }
+      }
+    }
+    tapAngles((vx - 1800) / 10, (900 - vy) / 10);
+  }
+
+  // ------------------------------------------------------------------ drawing
+  const COL = { go: '#4fd18b', lock: '#e0605a', info: '#5aa2e0', question: '#e8a33d', item: '#f3d36b', use: '#c58cf0' };
+  function glyph(kind) {
+    c.lineWidth = 6; c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineCap = 'round'; c.lineJoin = 'round';
+    if (kind === 'go') { c.beginPath(); c.moveTo(-13, 9); c.lineTo(0, -7); c.lineTo(13, 9); c.stroke(); }
+    else if (kind === 'lock') { c.fillRect(-12, -2, 24, 18); c.lineWidth = 5; c.beginPath(); c.arc(0, -3, 8, Math.PI, 0); c.stroke(); }
+    else if (kind === 'item') { c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, rr = i % 2 ? 6 : 17; c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } c.closePath(); c.fill(); }
+    else if (kind === 'use') { c.beginPath(); c.arc(0, -8, 7, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(0, 14, 13, Math.PI, 0); c.fill(); }   // a person
+    else { c.font = 'bold 36px "Segoe UI", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(kind === 'info' ? 'i' : '?', 0, 2); }
+  }
+  function drawObjRing(m, t) {
+    const h = t3 && t3.hit(m.id); if (!h) return;
+    const x = 1800 + h.yaw * 10, y = 900 - h.pitch * 10, r = h.rad * 10 + 8, sx = 1 / Math.max(0.3, Math.cos(h.pitch * Math.PI / 180));
+    const pulse = 0.5 + 0.5 * Math.sin(t / 1000 * Math.PI);
+    for (const ox of [0, -3600, 3600]) {
+      const px = x + ox; if (px < -300 || px > 3900) continue;
+      if (!m.hideRing) {                                                // "Hide the circle in the room": still tappable, still on the tablet
+        c.save(); c.translate(px, y); c.scale(sx, 1); c.globalAlpha = 0.35 + 0.4 * pulse; c.strokeStyle = COL.item; c.lineWidth = 4;
+        c.beginPath(); c.arc(0, 0, r + 5 * pulse, 0, Math.PI * 2); c.stroke(); c.restore();
+      }
+      if (m.label && !m.hideLabel) { c.font = '600 18px "Segoe UI", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 5;
+        c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(m.label, px, y + r + 12); c.fillStyle = '#fff'; c.fillText(m.label, px, y + r + 12); }
+    }
+  }
+  function drawMarker(m, t) {
+    if (has3d(m)) return drawObjRing(m, t);
+    const kind = locked(m) ? 'lock' : m.type, col = COL[kind] || '#fff';
+    const x = 1800 + m.yaw * 10, y = 900 - m.pitch * 10, sx = 1 / Math.max(0.3, Math.cos(m.pitch * Math.PI / 180));
+    const pulse = 0.5 + 0.5 * Math.sin(t / 1000 * Math.PI);                  // one slow pulse every 2 s (well under 3 flashes/s)
+    for (const ox of [0, -3600, 3600]) {
+      const px = x + ox; if (px < -150 || px > 3750) continue;
+      if (!m.hideRing) {                                                // "Hide the circle in the room": still tappable, still on the tablet
+        c.save(); c.translate(px, y); c.scale(sx, 1);
+        c.globalAlpha = 0.25 + 0.35 * pulse; c.strokeStyle = col; c.lineWidth = 5;
+        c.beginPath(); c.arc(0, 0, 38 + 7 * pulse, 0, Math.PI * 2); c.stroke();
+        c.globalAlpha = 1; c.fillStyle = 'rgba(10,14,20,.6)'; c.beginPath(); c.arc(0, 0, 30, 0, Math.PI * 2); c.fill();
+        c.lineWidth = 5; c.strokeStyle = col; c.stroke();
+        glyph(kind);
+        c.restore();
+      }
+      const label = m.hideLabel ? '' : (m.label || '');                  // "Hide the label in the room" (the tablet still names it)
+      if (label) {
+        c.font = '600 18px "Segoe UI", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'top';
+        c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(label, px, y + 50); c.fillStyle = '#fff'; c.fillText(label, px, y + 50);
+      }
+    }
+  }
+  function wrapText(text, maxW) {
+    const out = [];
+    for (const para of String(text || '').split('\n')) {
+      if (!para.trim()) { out.push(''); continue; }
+      let line = '';
+      for (const w of para.split(/\s+/)) {
+        const tryL = line ? line + ' ' + w : w;
+        if (c.measureText(tryL).width > maxW && line) { out.push(line); line = w; } else line = tryL;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  function roundRect(x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+  const FONT = '"Segoe UI", system-ui, sans-serif';
+  const ACC = { info: '#8cc4f0', intro: '#f3c27a', question: '#f3c27a', found: '#f3d36b', code: '#ff9a92', end: '#9be3b5', inspect: '#f3d36b', use: '#d6b0f5', useResult: '#d6b0f5' };
+  function layoutCard(cd) {
+    // card from about 17 degrees above eye level down to about 14 below: stays on the walls in all the rooms, off the floor and ceiling
+    // a "high" card is a band across the top of the wall (about +16.5 to +1.5 degrees): stays under the unprojected ceiling
+    // even towards the corners, and clear of the object held up below it
+    const w = cd.w || 580, pad = cd.high ? 20 : 26, top = 900 - (cd.high ? 165 : 170), maxH = cd.high ? 150 : 310, inner = w - pad * 2;
+    // footers: in the room people use the tablet; in a Room Builder preview there is no tablet, so they click
+    const pg = cd.kind === 'inspect' && pagesOf(cd.item).length > 1 ? `Page ${S.page + 1} of ${pagesOf(cd.item).length} · ` : '';
+    const foot = RB ? ({ info: 'Click here to close', intro: 'Click here to close', found: 'Click here to close', code: 'Type the code, then press Enter', end: '',
+                         inspect: pg + (modelOf(cd.item) ? 'Arrow keys turn it · ' : '') + (pg ? 'Page Up/Down · ' : '') + (cd.choose ? 'T takes it · click here to put it back' : cd.look ? 'click here to put it back' : 'click here to put it away'),
+                         use: (cd.options || []).length ? 'Click what to give' : 'Click here to close', useResult: 'Click here to continue' }[cd.kind] ?? (cd.choice == null ? 'Click an answer' : 'Click here to continue'))
+                    : ({ info: 'Close on the tablet', intro: 'Close on the tablet', found: 'Close on the tablet', code: 'Enter the code on the tablet', end: '',
+                         inspect: pg + (cd.choose ? 'Take it or put it back on the tablet' : modelOf(cd.item) ? 'Turn it on the tablet' : cd.look ? 'Put it back on the tablet' : 'Put it away on the tablet'),
+                         use: (cd.options || []).length ? 'Choose what to give on the tablet' : 'Close on the tablet', useResult: 'Continue on the tablet' }[cd.kind] ?? (cd.choice == null ? 'Answer on the tablet' : 'Continue on the tablet'));
+    for (let fs = 22; fs >= 11; fs -= 1) {
+      const L = { fs, items: [], rects: [] }; let y = pad;
+      c.font = `700 ${Math.round(fs * 1.25)}px ${FONT}`;
+      for (const ln of wrapText(cd.title, inner)) { L.items.push({ t: ln, y, f: c.font, col: ACC[cd.kind] || '#fff' }); y += fs * 1.55; }
+      y += fs * 0.3;
+      c.font = `400 ${fs}px ${FONT}`;
+      for (const ln of wrapText(cd.text, inner)) { L.items.push({ t: ln, y, f: c.font, col: '#eef1f5' }); y += fs * 1.35; }
+      if (cd.kind === 'code') {
+        if (cd.error) { L.items.push({ t: cd.error, y, f: `600 ${fs}px ${FONT}`, col: '#ff9a92' }); y += fs * 1.35; }
+        if (S.typed) { L.items.push({ t: S.typed.replace(/./g, '•'), y, f: `700 ${fs * 1.3}px ${FONT}`, col: '#fff' }); y += fs * 1.6; }
+      }
+      if (cd.options && cd.options.length) {
+        y += fs * 0.4;
+        const m = markerById(cd.mid);
+        cd.options.forEach((o, i) => {
+          c.font = `400 ${fs}px ${FONT}`;
+          const lines = wrapText(o, inner - fs * 2.4), hh = lines.length * fs * 1.3 + fs * 0.7;
+          let state = '';
+          if (cd.choice != null && m && cd.kind === 'question') {
+            const op = (m.options || [])[i] || {};
+            if (scored(m) ? op.correct : i === cd.choice) state = 'good';
+            if (i === cd.choice && scored(m) && !op.correct) state = 'bad';
+          }
+          L.rects.push({ x: pad - 8, y: y - fs * 0.3, w: inner + 16, h: hh, opt: cd.choice == null ? i : null, state, letter: LETTERS[i], lines, fs });
+          y += hh + fs * 0.35;
+        });
+      }
+      if (cd.feedback) { y += fs * 0.2; c.font = `600 ${fs}px ${FONT}`; for (const ln of wrapText(cd.feedback, inner)) { L.items.push({ t: ln, y, f: c.font, col: '#f3c27a' }); y += fs * 1.35; } }
+      if (foot) { y += fs * 0.5; L.btn = { x: pad - 8, y: y - fs * 0.25, w: inner + 16, h: fs * 1.5, t: foot, fs: fs * 0.8 }; y += fs * 1.5; }
+      L.h = y + pad - fs * 0.3;
+      if (L.h <= maxH || fs === 11) { L.w = w; L.x = 1800 + cd.yaw * 10 - w / 2; L.y = top; return L; }
+    }
+  }
+  function drawCard(cd) {
+    const L = layoutCard(cd); if (!L) return;
+    cd.rects = [];
+    for (const ox of [0, -3600, 3600]) {
+      const x0 = L.x + ox; if (x0 > 3600 || x0 + L.w < 0) continue;
+      c.save(); c.translate(x0, L.y);
+      roundRect(0, 0, L.w, L.h, 18); c.fillStyle = 'rgba(16,20,26,.88)'; c.fill();
+      c.lineWidth = 3; c.strokeStyle = ACC[cd.kind] || '#fff'; c.stroke();
+      c.textAlign = 'left'; c.textBaseline = 'top';
+      for (const it of L.items) { c.font = it.f; c.fillStyle = it.col; c.fillText(it.t, 26, it.y); }
+      for (const r of L.rects) {
+        roundRect(r.x, r.y, r.w, r.h, 10);
+        c.fillStyle = r.state === 'good' ? 'rgba(47,158,91,.55)' : r.state === 'bad' ? 'rgba(194,66,59,.55)' : 'rgba(255,255,255,.07)'; c.fill();
+        c.font = `700 ${r.fs}px ${FONT}`; c.fillStyle = '#f3c27a'; c.fillText(r.letter, r.x + 12, r.y + r.fs * 0.35);
+        c.font = `400 ${r.fs}px ${FONT}`; c.fillStyle = '#fff';
+        r.lines.forEach((ln, i) => c.fillText(ln, r.x + r.fs * 2.2, r.y + r.fs * 0.35 + i * r.fs * 1.3));
+      }
+      if (L.btn) { c.font = `600 ${L.btn.fs}px ${FONT}`; c.fillStyle = '#9aa4b2'; c.textAlign = 'center'; c.fillText(L.btn.t, L.w / 2, L.btn.y + L.btn.fs * 0.3); }
+      c.restore();
+    }
+    for (const r of L.rects) if (r.opt != null) cd.rects.push({ x: L.x + r.x, y: L.y + r.y, w: r.w, h: r.h, opt: r.opt });
+    if (L.btn) cd.rects.push({ x: L.x + L.btn.x, y: L.y + L.btn.y, w: L.btn.w, h: L.btn.h, btn: true });
+  }
+  function pill(text, yaw, pitch, fs, col) {
+    c.font = `600 ${fs}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const w = Math.min(900, c.measureText(text).width + fs * 1.6), h = fs * 1.9, x = 1800 + yaw * 10, y = 900 - pitch * 10;
+    for (const ox of [0, -3600, 3600]) {
+      if (x + ox + w < 0 || x + ox - w > 3600) continue;
+      roundRect(x + ox - w / 2, y - h / 2, w, h, h / 2); c.fillStyle = 'rgba(16,20,26,.85)'; c.fill();
+      c.lineWidth = 2; c.strokeStyle = col; c.stroke(); c.fillStyle = '#fff'; c.fillText(text, x + ox, y + 1);
+    }
+  }
+  function frame(t) {
+    if (bgDirty) {
+      bgDirty = false;
+      bgc.setTransform(1, 0, 0, 1, 0, 0); bgc.fillStyle = '#000'; bgc.fillRect(0, 0, W, H);
+      if (curImg) { bgc.globalAlpha = bright; bgc.drawImage(curImg, 0, 0, W, H); bgc.globalAlpha = 1; }
+      gl.style.opacity = bright;
+      if (look) { look.bgTex.needsUpdate = true; look.glMat.opacity = bright; }
+    }
+    try { if (t3 && t3.frame() && look) look.glTex.needsUpdate = true; } catch (e) { if (!frame.err3) { frame.err3 = 1; console.error('3D error:', e); } }
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+    c.setTransform(W / 3600, 0, 0, H / 1800, 0, 0);
+    const r = roomById(S.room);
+    if (r && !busy && bright > 0.99) try {                            // a drawing error must never stop the loop (the room would freeze)
+      const home = WALLS[r.cardWall] ?? 0;
+      for (const m of r.markers || []) if (visible(m) && m.id !== S.holding) drawMarker(m, t);
+      if (S.card) drawCard(S.card);
+      else if (now() < S.titleUntil && r.name) pill(r.name, home, 13, 30, '#f3c27a');
+      if (S.toast) pill(S.toast.text, S.toast.yaw, -9, 24, '#e8a33d');
+      if (S.items.size && !t3) {                                      // no 3D: fall back to a flat label on the floor in front of the card wall
+        const fd = wallDist(r, home) - 0.6;
+        pill('Carrying: ' + [...S.items].map(itemName).join(' · '), home, -Math.atan(eyeOf(r) / fd) * 180 / Math.PI, 20, '#f3d36b');
+      }
+    } catch (e) { if (!frame.err) { frame.err = 1; console.error('Drawing error:', e); } }
+    if (look) look.draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ------------------------------------------------------------------ input on the room PC / laptop
+  let look = null;
+  if (!LOOK) {
+    fx.addEventListener('pointerdown', (e) => {
+      const b = fx.getBoundingClientRect();
+      tapVirtual((e.clientX - b.left) / b.width * 3600, (e.clientY - b.top) / b.height * 1800);
+    });
+  }
+  addEventListener('keydown', (e) => {
+    const cd = S.card;
+    if (cd && cd.kind === 'code') {
+      if (e.key === 'Enter') { tryCode(S.typed); e.preventDefault(); return; }
+      if (e.key === 'Escape') { closeCard(); return; }
+      if (e.key === 'Backspace') { S.typed = S.typed.slice(0, -1); e.preventDefault(); return; }
+      if (e.key.length === 1 && S.typed.length < 24) { S.typed += e.key; return; }
+      return;
+    }
+    if (cd && (cd.kind === 'question' || cd.kind === 'use') && cd.choice == null && /^[1-9]$/.test(e.key)) chooseOption(+e.key - 1);
+    else if (cd && cd.kind === 'inspect' && cd.choose && (e.key === 't' || e.key === 'T')) takeHeld();   // "Students choose": T takes it
+    else if (cd && cd.kind === 'inspect' && /^Arrow|^Page|^[+=\-]$/.test(e.key)) {      // turn, zoom and page through what you're holding
+      const k = e.key, R = S.rot;
+      if (k === 'ArrowLeft') R.ry -= 25; else if (k === 'ArrowRight') R.ry += 25;
+      else if (k === 'ArrowUp') R.rx = Math.max(-80, R.rx - 20); else if (k === 'ArrowDown') R.rx = Math.min(80, R.rx + 20);
+      else if (k === '+' || k === '=') R.zoom = Math.min(2.5, R.zoom * 1.2); else if (k === '-') R.zoom = Math.max(0.4, R.zoom / 1.2);
+      else if (k === 'PageDown') turnPage(1); else if (k === 'PageUp') turnPage(-1);
+      sync3d(); e.preventDefault();
+    }
+    else if (e.key === 'Tab' && S.items.size) { const a = [...S.items]; S.sel = a[(a.indexOf(S.sel) + 1) % a.length]; toast('Holding: ' + itemName(S.sel)); e.preventDefault(); }
+    else if ((e.key === 'i' || e.key === 'I') && S.sel) inspect(S.sel);
+    else if (e.key === 'Enter' || e.key === ' ') cardButton();
+    else if (e.key === 'Escape') closeCard();
+    else if (e.key === 'Backspace') { back(); e.preventDefault(); }
+  });
+
+  // drag-to-look viewer (Room Builder only): the two canvases become textures on spheres
+  if (LOOK) {
+    document.body.classList.add('look');
+    const THREE = await import('three');
+    const canvas = document.createElement('canvas'); canvas.style.cursor = 'grab'; document.body.prepend(canvas);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
+    const mk = (cv, rad) => {
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      const geo = new THREE.SphereGeometry(rad, 96, 64); geo.scale(-1, 1, 1);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: rad < 10, depthWrite: false }));
+      mesh.rotation.y = -Math.PI / 2; scene.add(mesh); return { tex, mesh };
+    };
+    const b = mk(bg, 10), g3 = mk(gl, 9.75), f = mk(fx, 9.5);
+    g3.mesh.material.transparent = true; g3.mesh.material.premultipliedAlpha = true;
+    let yaw = 0, pitch = 0, drag = null, lastFx = 0;
+    const size2 = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); };
+    addEventListener('resize', size2); size2();
+    const ray = new THREE.Raycaster();
+    canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, yaw, pitch, moved: false }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 5) drag.moved = true;
+      yaw = drag.yaw - (e.clientX - drag.x) * 0.2; pitch = Math.max(-85, Math.min(85, drag.pitch + (e.clientY - drag.y) * 0.2));
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      const d = drag; drag = null; if (!d || d.moved) return;
+      ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), cam);
+      const hit = ray.intersectObject(b.mesh)[0]; if (!hit || !hit.uv) return;
+      tapVirtual(hit.uv.x * 3600, (1 - hit.uv.y) * 1800);
+    });
+    canvas.addEventListener('wheel', (e) => { cam.fov = Math.max(30, Math.min(110, cam.fov + Math.sign(e.deltaY) * 4)); cam.updateProjectionMatrix(); e.preventDefault(); }, { passive: false });
+    look = {
+      bgTex: b.tex, glTex: g3.tex, glMat: g3.mesh.material,
+      draw() {
+        if (now() - lastFx > 33) { lastFx = now(); f.tex.needsUpdate = true; }
+        const y = THREE.MathUtils.degToRad(yaw), pt = THREE.MathUtils.degToRad(pitch);
+        cam.lookAt(new THREE.Vector3(Math.sin(y) * Math.cos(pt), Math.sin(pt), -Math.cos(y) * Math.cos(pt)));
+        renderer.render(scene, cam);
+      },
+    };
+  }
+
+  // ------------------------------------------------------------------ tablet (scene server only): remote.js
+  const ctrls = [];
+  const lastN = {};
+  const verb = (m) => locked(m) ? 'Unlock' : m.type === 'item' && (m.take === false || m.take === 'choose') ? 'Look' : { go: 'Go', info: 'Read', question: 'Answer', item: 'Pick up', use: 'Talk' }[m.type] || 'Go';
+  function buildControls() {
+    const r = roomById(S.room), list = [];
+    const status = [`${S.visited.size} of ${T.rooms.length} rooms visited`];
+    if (S.items.size) status.push('Carrying: ' + [...S.items].map(itemName).join(', '));
+    list.push({ id: 'where', type: 'text', group: T.name || 'Tour', label: r ? r.name || 'Room' : 'Loading…', hint: status.join(' · ') });
+    if (S.toast) list.push({ id: 'note', type: 'text', group: T.name || 'Tour', label: S.toast.text });
+    const cd = S.card, G = 'On the wall';
+    if (S.insp && modelOf(S.insp)) {
+      list.push({ id: 'turn', type: 'turn', group: 'Holding', label: 'Drag to turn the ' + itemName(S.insp), session: S.inspN, rx: S.rot.rx, ry: S.rot.ry, zoom: S.rot.zoom });
+    }
+    if (cd) {
+      if (cd.kind === 'inspect') {
+        list.push({ id: 'card', type: 'text', group: G, label: cd.title, hint: cd.text });
+        const n = pagesOf(cd.item).length;
+        if (n > 1) { list.push({ id: 'pg_prev', type: 'button', group: G, label: `Page ${S.page + 1} of ${n}`, action: '◀ Back' });
+                     list.push({ id: 'pg_next', type: 'button', group: G, label: '', action: 'Next ▶' }); }
+        if (cd.choose) list.push({ id: 'takeit', type: 'button', group: G, label: 'Take it: put it in your bag', action: 'Take it' });
+        list.push({ id: 'putaway', type: 'button', group: G, label: cd.look ? 'Put it back where it was' : 'Put it back in the bag', action: cd.look ? 'Put back' : 'Put away' });
+      } else if (cd.kind === 'use') {
+        list.push({ id: 'card', type: 'text', group: G, label: cd.title, hint: cd.text });
+        cd.optItems.forEach((it) => list.push({ id: `give:${cd.mid}:${it}`, type: 'button', group: G, label: 'Give: ' + itemName(it), action: 'Give', thumb: thumbOf(it) }));
+        list.push({ id: 'close', type: 'button', group: G, label: 'Not now', action: 'Close' });
+      } else if (cd.kind === 'useResult') {
+        list.push({ id: 'card', type: 'text', group: G, label: cd.title, hint: cd.text, tone: cd.good ? 'good' : 'bad' });
+        list.push({ id: 'cont', type: 'button', group: G, label: 'Continue', action: 'OK' });
+      } else if (cd.kind === 'question') {
+        if (cd.choice == null) {
+          list.push({ id: 'card', type: 'text', group: G, label: cd.title, hint: cd.text });
+          cd.options.forEach((o, i) => list.push({ id: `a_${cd.mid}_${i}`, type: 'button', group: G, label: `${LETTERS[i]}. ${o}`, action: 'Choose' }));
+        } else {
+          list.push({ id: 'card', type: 'text', group: G, label: `${cd.title}: ${LETTERS[cd.choice]}. ${cd.options[cd.choice] || ''}`, hint: cd.feedback });
+          list.push({ id: 'cont', type: 'button', group: G, label: 'Continue', action: 'OK' });
+        }
+      } else {
+        list.push({ id: 'card', type: 'text', group: G, label: cd.title, hint: cd.text + (cd.error ? '\n' + cd.error : '') });
+        if (cd.kind === 'code') list.push({ id: 'code', type: 'code', group: G, label: 'Code' });
+        if (cd.kind === 'end') list.push({ id: 'restart', type: 'button', group: G, label: 'Start the tour again', action: 'Restart' });
+        else list.push({ id: 'close', type: 'button', group: G, label: 'Take the card off the wall', action: 'Close' });
+      }
+    }
+    if (S.items.size) {                                             // the bag: pick an item, then look at it or give it to someone here
+      list.push({ id: 'bag', type: 'inventory', group: 'Your bag', label: 'Your bag', selected: S.sel,
+                  items: [...S.items].map((id) => ({ id, name: itemName(id), thumb: thumbOf(id) })) });
+      if (S.sel && S.items.has(S.sel)) {
+        if (S.insp !== S.sel && (modelOf(S.sel) || pagesOf(S.sel).length || (itemOf(S.sel) || {}).description))
+          list.push({ id: 'look', type: 'button', group: 'Your bag', label: 'Look at the ' + itemName(S.sel), action: modelOf(S.sel) ? 'Look' : 'Read' });
+        for (const m of (r ? r.markers || [] : []).filter((x) => x.type === 'use' && visible(x)))
+          list.push({ id: `giveto:${m.id}`, type: 'button', group: 'Your bag', label: `Give the ${itemName(S.sel)} to ${m.label || 'them'}`, action: 'Give' });
+      }
+    }
+    if (r) {
+      const vis = (r.markers || []).filter(visible);
+      list.push({ id: 'pano', type: 'pano', group: 'In this room', label: 'Tap the picture to look closer or go somewhere', src: imgUrl(r),
+                  markers: vis.map((m) => { const a = spot(m); return { yaw: a.yaw, pitch: a.pitch, label: m.label || '', kind: locked(m) ? 'lock' : m.type }; }) });
+      for (const m of vis) list.push({ id: 'm_' + m.id, type: 'button', group: 'In this room', label: m.label || verb(m), action: verb(m) });
+    }
+    if (S.history.length) list.push({ id: 'back', type: 'button', group: 'Facilitator', staff: true, label: 'Back to ' + ((roomById(S.history[S.history.length - 1]) || {}).name || 'the last room'), action: 'Back' });
+    list.push({ id: 'restart', type: 'button', group: 'Facilitator', staff: true, label: 'Restart the tour', hint: 'Clears found items and answers', action: 'Restart' });
+    for (const x of T.rooms) if (x.id !== S.room) list.push({ id: 'j_' + x.id, type: 'button', group: 'Jump to a room', staff: true, label: x.name || 'Room', action: 'Go' });
+    const seen = new Set(); ctrls.length = 0;
+    for (const x of list) if (!seen.has(x.id)) { seen.add(x.id); ctrls.push(x); }   // ids must be unique (restart can appear twice)
+  }
+  function changed() { sync3d(); if (window.Remote) { buildControls(); if (Remote.report) Remote.report(); } }
+  function remoteSet(id, v) {
+    if (id === 'turn') {                                                // absolute turn from the student tablet, for this look only
+      if (v && typeof v === 'object' && v.s === S.inspN && S.insp) {
+        S.rot.rx = Math.max(-85, Math.min(85, +v.rx || 0)); S.rot.ry = +v.ry || 0; S.rot.zoom = Math.max(0.4, Math.min(2.5, +v.zoom || 1)); sync3d();
+      }
+      return;
+    }
+    if (id === 'bag') { if (v && typeof v === 'object' && v.n !== lastN.bag) { lastN.bag = v.n; if (S.items.has(v.v)) { S.sel = v.v; changed(); } } return; }
+    if (id.startsWith('give:')) { const [, mid, it] = id.split(':'); return give(mid, it); }
+    if (id.startsWith('giveto:')) return S.sel ? give(id.slice(7), S.sel) : undefined;
+    if (id === 'look') return S.sel ? inspect(S.sel) : undefined;
+    if (id === 'putaway') return closeCard();
+    if (id === 'takeit') return takeHeld();
+    if (id === 'pg_prev') return turnPage(-1);
+    if (id === 'pg_next') return turnPage(1);
+    if (id === 'pano' || id === 'code') {                               // {..., n}: n makes every tap/try a new one
+      if (!v || typeof v !== 'object' || v.n === lastN[id]) return;
+      lastN[id] = v.n;
+      if (now() - loadedAt < 1500) return;                               // left over from before this page loaded
+      if (id === 'pano') tapAngles(+v.yaw || 0, +v.pitch || 0); else tryCode(String(v.v || ''));
+      return;
+    }
+    if (id.startsWith('m_')) return activate(markerById(id.slice(2)));
+    if (id.startsWith('a_')) return answer(+id.slice(id.lastIndexOf('_') + 1));
+    if (id.startsWith('j_')) return goTo(id.slice(2));
+    if (id === 'cont') return cardButton();
+    if (id === 'close') return closeCard();
+    if (id === 'back') return back();
+    if (id === 'restart') return restart();
+  }
+  if (!RB) {
+    await new Promise((res) => { const s = document.createElement('script'); s.src = '/remote.js'; s.onload = res; s.onerror = res; document.head.append(s); });
+    if (window.Remote) { buildControls(); Remote.init({ title: T.name || 'Tour', controls: ctrls, get: () => undefined, set: remoteSet }); }
+  }
+
+  const startId = roomById(Q.get('room')) ? Q.get('room') : (roomById(T.start) ? T.start : T.rooms[0].id);
+  requestAnimationFrame(frame);
+  goTo(startId, { fresh: true });
+})();
+</script>
+</body>
+</html>

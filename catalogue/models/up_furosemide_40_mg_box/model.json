@@ -1,0 +1,33 @@
+{
+  "id": "up_furosemide_40_mg_box",
+  "name": "Furosemide 40 mg box",
+  "file": "model.glb",
+  "thumb": "thumb.png",
+  "category": "clutter",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "furosemide",
+    "box",
+    "uploaded"
+  ],
+  "status": "untested",
+  "notes": "Uploaded from furosemide_box.glb.",
+  "scale": 1.0,
+  "polycount": 39520,
+  "size": [
+    0.135,
+    0.05,
+    0.075
+  ],
+  "warnings": [],
+  "licence": {
+    "source": "Uploaded",
+    "author": "",
+    "licence": "Own upload (check you may use it)",
+    "credit_required": false,
+    "credit_line": ""
+  }
+}

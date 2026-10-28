@@ -159,6 +159,236 @@
    "category": "halloween",
    "source": "Room Builder",
    "licence": "Own work"
+  },
+  {
+   "id": "gr_tag_krayz",
+   "name": "Tag \"Krayz\" (black, with swoosh)",
+   "file": "gr_tag_krayz.png",
+   "width": 1.1,
+   "aspect": 0.3668,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_tag_mosh",
+   "name": "Tag \"Mosh\" (silver)",
+   "file": "gr_tag_mosh.png",
+   "width": 0.9,
+   "aspect": 0.3623,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_tag_drek",
+   "name": "Tag \"Drek\" (red, with crown)",
+   "file": "gr_tag_drek.png",
+   "width": 1.0,
+   "aspect": 0.416,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_tag_vexa",
+   "name": "Tag \"Vexa\" (blue)",
+   "file": "gr_tag_vexa.png",
+   "width": 0.9,
+   "aspect": 0.4426,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_throwup_chrome",
+   "name": "Throw-up \"OZ\" (chrome, black outline)",
+   "file": "gr_throwup_chrome.png",
+   "width": 1.4,
+   "aspect": 0.7157,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_throwup_pink",
+   "name": "Throw-up \"KB\" (pink)",
+   "file": "gr_throwup_pink.png",
+   "width": 1.2,
+   "aspect": 0.6965,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_piece_rokit",
+   "name": "Piece \"ROKIT\" (yellow-orange, 3D)",
+   "file": "gr_piece_rokit.png",
+   "width": 2.6,
+   "aspect": 0.3344,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_piece_vexa",
+   "name": "Piece \"VEXA\" (teal, double outline)",
+   "file": "gr_piece_vexa.png",
+   "width": 2.4,
+   "aspect": 0.3387,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_piece_skoe",
+   "name": "Piece \"SKOE\" (green, arrows)",
+   "file": "gr_piece_skoe.png",
+   "width": 2.2,
+   "aspect": 0.4094,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_stencil_keep_out",
+   "name": "Stencil \"KEEP OUT\" (black)",
+   "file": "gr_stencil_keep_out.png",
+   "width": 1.0,
+   "aspect": 0.3679,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_stencil_eye",
+   "name": "Stencil eye \"WHO?\" (red)",
+   "file": "gr_stencil_eye.png",
+   "width": 0.7,
+   "aspect": 0.8049,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_drips_bored",
+   "name": "\"BORED\" (red, dripping)",
+   "file": "gr_drips_bored.png",
+   "width": 1.0,
+   "aspect": 0.4073,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_drips_why",
+   "name": "\"WHY?\" (black, dripping)",
+   "file": "gr_drips_why.png",
+   "width": 0.8,
+   "aspect": 0.4674,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_heart_jk",
+   "name": "Heart \"J + K 4EVA\" (red spray)",
+   "file": "gr_heart_jk.png",
+   "width": 0.6,
+   "aspect": 0.9054,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_marker_woz_ere",
+   "name": "Marker scrawl \"woz ere\" (blue felt-tip)",
+   "file": "gr_marker_woz_ere.png",
+   "width": 0.5,
+   "aspect": 0.5806,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_marker_doodles",
+   "name": "Marker scrawl and doodles (black felt-tip)",
+   "file": "gr_marker_doodles.png",
+   "width": 0.45,
+   "aspect": 0.4418,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_scratched_tally",
+   "name": "Scratched tally marks (cell wall)",
+   "file": "gr_scratched_tally.png",
+   "width": 0.35,
+   "aspect": 0.7627,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_scratched_words",
+   "name": "Scratched initials and words (cell wall)",
+   "file": "gr_scratched_words.png",
+   "width": 0.4,
+   "aspect": 0.7084,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_buffed",
+   "name": "Buffed-over graffiti (grey paint patches)",
+   "file": "gr_buffed.png",
+   "width": 1.4,
+   "aspect": 0.405,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_stickers",
+   "name": "Sticker slaps (cluster)",
+   "file": "gr_stickers.png",
+   "width": 0.45,
+   "aspect": 0.9444,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_splat_green",
+   "name": "Thrown paint splat (green)",
+   "file": "gr_splat_green.png",
+   "width": 0.9,
+   "aspect": 0.9359,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_symbols_crown_arrow",
+   "name": "Spray crown and arrow (yellow)",
+   "file": "gr_symbols_crown_arrow.png",
+   "width": 0.8,
+   "aspect": 0.3234,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
+  },
+  {
+   "id": "gr_smiley",
+   "name": "Dripping smiley (yellow spray)",
+   "file": "gr_smiley.png",
+   "width": 0.5,
+   "aspect": 1.0515,
+   "category": "graffiti",
+   "source": "Room Builder graffiti pack",
+   "licence": "Own work"
   }
  ]
 }

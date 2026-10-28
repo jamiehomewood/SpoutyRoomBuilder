@@ -21,8 +21,3 @@ __pycache__/
 # decals people upload (kept on the PC)
 catalogue/decals/up_*
 catalogue/decals/_removed/
-
-# stand-alone Halloween builds (contain renders)
-Halloween_Room*.html
-halloween_standalone*.html
-node_modules/

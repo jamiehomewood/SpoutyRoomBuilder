@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "id": "example-discharge-home",
+  "name": "Example \u2013 discharge home (escape room)",
+  "description": "Take Glenda's notes to the doctor, get her discharge letter, get through the key safe, then find out why her legs are swelling.",
+  "start": "r_ward",
+  "items": [
+    {
+      "id": "i_notes",
+      "name": "Glenda's notes",
+      "model": "up_patient_notes_clipboard",
+      "description": "",
+      "pages": [
+        "Ward 4 \u00b7 Glenda Morris, 74\nHeart failure, AF, type 2 diabetes, high blood pressure.\nAdmitted with breathlessness and swollen legs.",
+        "Medicines going home\nFurosemide 40 mg every morning (water tablet)\nBisoprolol 2.5 mg \u00b7 Ramipril 5 mg \u00b7 Metformin 500 mg twice a day \u00b7 Aspirin 75 mg",
+        "Plan\nDistrict nurses to visit within 48 hours: legs, weight, medicines.\nTake these notes to Dr Shah for the discharge letter."
+      ]
+    },
+    {
+      "id": "i_letter",
+      "name": "Discharge letter",
+      "model": null,
+      "description": "",
+      "pages": [
+        "Discharge letter: Glenda Morris (74)\nGoing home to live alone, with district nurse visits.\nKey safe by the front door: code 1952."
+      ]
+    },
+    {
+      "id": "i_meds",
+      "name": "Furosemide 40 mg",
+      "model": "up_furosemide_40_mg_box",
+      "pages": [],
+      "description": "Her water tablets. The box hasn't been opened, and the label is dated three weeks ago."
+    }
+  ],
+  "rooms": [
+    {
+      "id": "r_ward",
+      "name": "Ward 4",
+      "lib": "20261025-161848-hospital-ward-4-bed-bays-outsi",
+      "view": "centre",
+      "dims": {
+        "w": 6.4,
+        "d": 5.71,
+        "h": 2.244,
+        "eye": 1.12,
+        "preset": "igloo-main"
+      },
+      "cardWall": "front",
+      "end": false,
+      "endText": "",
+      "intro": "Glenda (74) is going home today.\nFind her notes in the bed bay and take them to Dr Shah for her discharge letter.",
+      "markers": [
+        {
+          "id": "m_tobay",
+          "type": "go",
+          "yaw": 60,
+          "pitch": 0,
+          "label": "Bed bay",
+          "target": "r_bay",
+          "requires": [],
+          "code": "",
+          "auto": true
+        },
+        {
+          "id": "m_notice",
+          "type": "info",
+          "yaw": -45,
+          "pitch": 8,
+          "label": "Notice board",
+          "title": "Ward 4 \u2013 discharge day",
+          "text": "Patients going home today need: a discharge letter, their medicines explained, and a plan for community follow-up.",
+          "auto": false
+        },
+        {
+          "id": "m_shah",
+          "type": "use",
+          "yaw": 125,
+          "pitch": 4,
+          "label": "Dr Shah",
+          "text": "Dr Shah: Have you got Glenda's notes? I can't write her letter without them.",
+          "accepts": [
+            {
+              "item": "i_notes",
+              "correct": true,
+              "consume": true,
+              "give": "i_letter",
+              "go": null,
+              "feedback": "Dr Shah: Thank you. Here's her discharge letter. The key safe code is on it."
+            }
+          ],
+          "wrongText": "Dr Shah: That's not what I need. I need her notes.",
+          "auto": false
+        },
+        {
+          "id": "m_exit",
+          "type": "go",
+          "yaw": 180,
+          "pitch": 0,
+          "label": "To Glenda's home",
+          "target": "r_home",
+          "requires": [
+            "i_letter"
+          ],
+          "lockedText": "You need Glenda's discharge letter first. Dr Shah writes it.",
+          "code": "1952",
+          "codePrompt": "Glenda's key safe. Enter the code from her discharge letter.",
+          "auto": false
+        }
+      ]
+    },
+    {
+      "id": "r_bay",
+      "name": "Bed bay",
+      "lib": "20261025-161848-hospital-ward-4-bed-bays-outsi",
+      "view": "bay",
+      "dims": {
+        "w": 6.4,
+        "d": 5.71,
+        "h": 2.244,
+        "eye": 1.12,
+        "preset": "igloo-main"
+      },
+      "cardWall": "front",
+      "end": false,
+      "endText": "",
+      "intro": "",
+      "markers": [
+        {
+          "id": "m_q1",
+          "type": "question",
+          "yaw": 30,
+          "pitch": 5,
+          "label": "Before she goes",
+          "retry": true,
+          "text": "Which check matters most before Glenda goes home?",
+          "options": [
+            {
+              "text": "Her medicines and how she will take them",
+              "correct": true,
+              "feedback": "Yes. Look out for her medicines when you visit."
+            },
+            {
+              "text": "That her TV licence is paid",
+              "correct": false,
+              "feedback": "Not a nursing priority today."
+            },
+            {
+              "text": "What she would like for lunch",
+              "correct": false,
+              "feedback": "Food matters, but think about safety first."
+            }
+          ],
+          "auto": false
+        },
+        {
+          "id": "m_back",
+          "type": "go",
+          "yaw": 180,
+          "pitch": 0,
+          "label": "Back to the ward",
+          "target": "r_ward",
+          "requires": [],
+          "code": "",
+          "auto": false
+        },
+        {
+          "id": "m_notes",
+          "type": "item",
+          "item": "i_notes",
+          "yaw": -76,
+          "pitch": -2.7,
+          "dist": 3,
+          "h": 0.98,
+          "turn": 15,
+          "size": 1,
+          "label": "Glenda's notes",
+          "hidden": false,
+          "radius": 6,
+          "text": "",
+          "auto": true
+        }
+      ]
+    },
+    {
+      "id": "r_home",
+      "name": "Glenda's living room",
+      "lib": "20261025-222245-room-with-sofa-1",
+      "view": "centre",
+      "dims": {
+        "w": 6.4,
+        "d": 5.71,
+        "h": 2.244,
+        "eye": 1.12,
+        "preset": "igloo-main"
+      },
+      "cardWall": "front",
+      "end": false,
+      "endText": "",
+      "intro": "You let yourselves in with the key safe. Look around before you start your assessment.",
+      "markers": [
+        {
+          "id": "m_where",
+          "type": "question",
+          "yaw": 0,
+          "pitch": 6,
+          "label": "Where first?",
+          "retry": false,
+          "text": "Where do you start?",
+          "options": [
+            {
+              "text": "Talk to Glenda here first",
+              "correct": false,
+              "feedback": "She tells you her legs are 'leaking'."
+            },
+            {
+              "text": "Check the kitchen and her medicines",
+              "correct": false,
+              "feedback": "",
+              "go": "r_kitchen"
+            }
+          ],
+          "auto": false
+        },
+        {
+          "id": "m_tokit",
+          "type": "go",
+          "yaw": 90,
+          "pitch": 0,
+          "label": "Kitchen",
+          "target": "r_kitchen",
+          "requires": [],
+          "code": "",
+          "auto": true
+        },
+        {
+          "id": "m_meds",
+          "type": "item",
+          "item": "i_meds",
+          "yaw": 108,
+          "pitch": -4.2,
+          "dist": 2.85,
+          "h": 0.91,
+          "turn": -60,
+          "size": 1,
+          "label": "Furosemide box",
+          "hidden": true,
+          "radius": 6,
+          "text": "At the back of the worktop, behind the kettle, with a pile of other boxes.",
+          "auto": false
+        },
+        {
+          "id": "m_glenda",
+          "type": "use",
+          "yaw": -78,
+          "pitch": 1,
+          "label": "Glenda",
+          "text": "Glenda: Hello, dears. My legs are leaking again.",
+          "accepts": [
+            {
+              "item": "i_meds",
+              "correct": true,
+              "consume": false,
+              "feedback": "Glenda: Oh, those. They make me run to the loo, so I stopped taking them.\nThat explains her swollen legs: talk to her about her medicines.",
+              "go": null,
+              "give": null
+            },
+            {
+              "item": "i_letter",
+              "correct": false,
+              "consume": false,
+              "feedback": "Glenda: I've read it, dear. What I want to know is why my legs are so bad.",
+              "go": null,
+              "give": null
+            }
+          ],
+          "wrongText": "Glenda isn't sure what you mean.",
+          "auto": false
+        }
+      ]
+    },
+    {
+      "id": "r_kitchen",
+      "name": "Glenda's kitchen",
+      "lib": "20261025-151105-glenda-modern-server-test",
+      "view": "kitchen",
+      "dims": {
+        "w": 6.4,
+        "d": 5.71,
+        "h": 2.244,
+        "eye": 1.12,
+        "preset": "igloo-main"
+      },
+      "cardWall": "front",
+      "end": true,
+      "intro": "",
+      "endText": "Well done. Now agree the referrals Glenda needs before you leave.",
+      "markers": [
+        {
+          "id": "m_toliving",
+          "type": "go",
+          "yaw": 180,
+          "pitch": 0,
+          "label": "Living room",
+          "target": "r_home",
+          "requires": [],
+          "code": "",
+          "auto": false
+        }
+      ]
+    }
+  ]
+}

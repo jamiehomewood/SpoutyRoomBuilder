@@ -346,6 +346,26 @@ export function archSpring(f, RH) {
 }
 
 // ------------------------------------------------------------------ the room
+// Corners: a full-height alcove or kitchenette that stops just short of a corner leaves a thin strip of the old wall
+// standing like a pillar. Within CORNER_SNAP of the corner, with nothing else in that strip, it is carried on to the corner
+// (where two then meet, the corner opens up). keep_gap: true keeps the strip. Copies: the spec stays as drawn.
+// generate.py _snap_corners() does the same for the render.
+export const CORNER_SNAP = 0.75;
+export function snapToCorners(features, walls, RH) {
+  const sp = f => [+f.pos - +f.width / 2, +f.pos + +f.width / 2];
+  return features.map(f => {
+    if (!['alcove', 'kitchenette'].includes(f.type) || f.keep_gap || !walls[f.wall]) return f;
+    if (Math.min(+(f.height ?? RH), RH) < RH - 0.01) return f;
+    const w = walls[f.wall]; let [u0, u1] = sp(f);
+    const others = features.filter(g => g !== f && g.wall === f.wall);
+    const clear = (a, b) => !others.some(g => { const [g0, g1] = sp(g); return g0 < b && g1 > a; });
+    let moved = false;
+    if (u0 - w.lo > 0.001 && u0 - w.lo < CORNER_SNAP && clear(w.lo, u0)) { u0 = w.lo; moved = true; }
+    if (w.hi - u1 > 0.001 && w.hi - u1 < CORNER_SNAP && clear(u1, w.hi)) { u1 = w.hi; moved = true; }
+    return moved ? { ...f, pos: (u0 + u1) / 2, width: u1 - u0, snapped: true } : f;
+  });
+}
+
 export function buildRoom(spec, opts = {}) {
   roomCondition = spec.condition || (spec.style === 'neglected' ? 'neglected' : 'new');
   const F = roomFrame(spec);
@@ -365,7 +385,7 @@ export function buildRoom(spec, opts = {}) {
   const ceilings = new THREE.Group(); ceilings.name = 'ceilings';
   const pick = [];                              // meshes that select a feature when clicked
   const zones = [{ name: 'main', x0: X0 - T / 2, y0: Y0 - T / 2, x1: X1 + T / 2, y1: Y1 + T / 2, floor: M.floor, h: RH }];
-  const feats = spec.features || [];
+  const feats = snapToCorners(spec.features || [], walls, RH);   // alcoves that nearly reach a corner go all the way (as generate.py)
   const add = (o, featId) => { if (featId) { o.userData.featureId = featId; pick.push(o); } root.add(o); return o; };
   const wb = (wall, u0, u1, d0, d1, z0, z1, mat, fid) => add(boxBetween(w2(wall, u0, d0, z0), w2(wall, u1, d1, z1), mat), fid);
 
@@ -551,7 +571,7 @@ export function buildRoom(spec, opts = {}) {
   const ROOM_TYPES = { room: [3, 3], toilet: [1.3, 1.8], bathroom: [2.4, 2.1], cupboard: [1.0, 0.8], conservatory: [3.4, 3.0], hallway: [2.0, 4.0], porch: [1.8, 1.4] };
   const STYLE_SIZES = { 'toilet/accessible': [1.7, 2.2], 'bathroom/wetroom': [2.4, 2.4], 'hallway/turning': [2.8, 4.0] };
   const sideRoom = (ft, wall, u0, u1) => {
-    const rm = ft.room || {}, kind = rm.type || 'room', style = rm.style || '', [dw, dd] = STYLE_SIZES[kind + '/' + style] || ROOM_TYPES[kind] || ROOM_TYPES.room;
+    const rm = ft.room || {}, SW = rm.finish?.walls ? M.alcoveSet({ wall: wall.split('@')[0], finish: { walls: rm.finish.walls } }).wall : M.wall, kind = rm.type || 'room', style = rm.style || '', [dw, dd] = STYLE_SIZES[kind + '/' + style] || ROOM_TYPES[kind] || ROOM_TYPES.room;
     const rw = Math.max(u1 - u0 + 0.3, +(rm.width ?? dw)), rd = Math.max(0.6, +(rm.depth ?? dd)), rp = +(rm.pos ?? (u0 + u1) / 2);
     let ru0 = Math.min(u0 - 0.15, rp - rw / 2), ru1 = Math.max(u1 + 0.15, rp + rw / 2);
     const keep = walls[wall].keep;                        // a door in an alcove's side wall: never back into the main room
@@ -559,26 +579,26 @@ export function buildRoom(spec, opts = {}) {
     const back = T + rd, cu = (ru0 + ru1) / 2, glazed = kind === 'conservatory' || kind === 'porch';
     const zd = kind === 'conservatory' ? 0.6 : 0.95, gtop = kind === 'conservatory' ? RH : Math.min(RH, 2.1);
     const sideW = (a, b) => {
-      if (!glazed) { wb(wall, a, b, T, back + T, 0, RH, M.wall, ft.id); return; }
-      wb(wall, a, b, T, back + T, 0, zd, M.wall, ft.id); if (gtop < RH) wb(wall, a, b, T, back + T, gtop, RH, M.wall, ft.id);
+      if (!glazed) { wb(wall, a, b, T, back + T, 0, RH, SW, ft.id); return; }
+      wb(wall, a, b, T, back + T, 0, zd, SW, ft.id); if (gtop < RH) wb(wall, a, b, T, back + T, gtop, RH, SW, ft.id);
       wb(wall, a + (b - a) * 0.45, a + (b - a) * 0.55, T, back, zd, gtop, M.glass, ft.id);
     };
     sideW(ru0 - T, ru0); sideW(ru1, ru1 + T);
-    for (const [a, b] of without(ru0, ru1, [[u0, u1]])) wb(wall, a, b, T, T + 0.02, 0, RH, M.wall, ft.id);
+    for (const [a, b] of without(ru0, ru1, [[u0, u1]])) wb(wall, a, b, T, T + 0.02, 0, RH, SW, ft.id);
     const far = virtualWall(wall, back, `${wall}@${ft.id}_far`);
-    const hole = (w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[cu - w_ / 2, cu + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
-      wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, 0, z0, M.wall, ft.id); wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, cu - w_ / 2, cu + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
+    const hole = (w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[cu - w_ / 2, cu + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, SW, ft.id);
+      wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, 0, z0, SW, ft.id); wb(far, cu - w_ / 2, cu + w_ / 2, 0, T, z1, RH, SW, ft.id); if (fill) wb(far, cu - w_ / 2, cu + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
     let leftA = ['north', 'west'].includes(baseOf(wall)); if (rm.stairs === 'right') leftA = !leftA;
     const Wd = ru1 - ru0, Ux = x => leftA ? ru0 + x : ru1 - x, bx = (x0, x1, d0, d1, z0, z1, m) => { const [a, b] = [Ux(x0), Ux(x1)].sort((p, q) => p - q); wb(wall, a, b, d0, d1, z0, z1, m, ft.id); };
     const turn = kind === 'hallway' && style === 'turning' && Wd >= 0.9 + 0.75 + 1.0;
     const ocu = kind === 'hallway' ? Ux(Math.min(Wd - 0.5, Math.max(Wd / 2, 0.9 + (turn ? 0.75 : 0) + 0.5))) : cu;
-    const holeAt = (c, w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[c - w_ / 2, c + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, M.wall, ft.id);
-      wb(far, c - w_ / 2, c + w_ / 2, 0, T, z1, RH, M.wall, ft.id); if (fill) wb(far, c - w_ / 2, c + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
+    const holeAt = (c, w_, z0, z1, fill) => { for (const [a, b] of without(ru0 - T, ru1 + T, [[c - w_ / 2, c + w_ / 2]])) wb(far, a, b, 0, T, 0, RH, SW, ft.id);
+      wb(far, c - w_ / 2, c + w_ / 2, 0, T, z1, RH, SW, ft.id); if (fill) wb(far, c - w_ / 2, c + w_ / 2, T * 0.45, T * 0.55, z0, z1, fill, ft.id); };
     if (kind === 'porch') hole(0.9, 0, 2.05, null);
     else if (kind === 'hallway') holeAt(ocu, 0.9, 0, 2.05, M.door);
-    else if (kind === 'conservatory') { wb(far, ru0 - T, ru1 + T, 0, T, 0, zd, M.wall, ft.id); wb(far, ru0, ru1, T * 0.45, T * 0.55, zd, RH, M.glass, ft.id); }
+    else if (kind === 'conservatory') { wb(far, ru0 - T, ru1 + T, 0, T, 0, zd, SW, ft.id); wb(far, ru0, ru1, T * 0.45, T * 0.55, zd, RH, M.glass, ft.id); }
     else if (rm.window && kind !== 'cupboard') kind === 'toilet' ? hole(0.6, 1.35, 1.95, M.frosted) : hole(Math.min(1.6, rw - 0.8), 0.85, 2.1, M.glass);
-    else wb(far, ru0 - T, ru1 + T, 0, T, 0, RH, M.wall, ft.id);
+    else wb(far, ru0 - T, ru1 + T, 0, T, 0, RH, SW, ft.id);
     if (kind === 'conservatory') wb(wall, ru0 - T, ru1 + T, T, back + T, RH - 0.01, RH, M.glass, ft.id);
     // a few blocks so you can see what kind of room it is
     const wcBack = u => { wb(wall, u - 0.19, u + 0.19, back - 0.19, back, 0.42, 0.8, M.fridge, ft.id); wb(wall, u - 0.17, u + 0.17, back - 0.68, back - 0.19, 0, 0.45, M.fridge, ft.id); };
@@ -606,8 +626,8 @@ export function buildRoom(spec, opts = {}) {
         bx(x0, x1, d0, d1, RH - 0.005, RH + 0.005, M.ceiling); bx(x0, x1, d0, d1, RH + 0.005, FL2, M.floor);
       }
       const sb = Ux(0.9);
-      if (full) { wb(wall, ru0 - T, ru0, T, back + T, RH, UP, M.wall, ft.id); wb(wall, ru1, ru1 + T, T, back + T, RH, UP, M.wall, ft.id);
-        wb(wall, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(far, ru0 - T, ru1 + T, 0, T, RH, UP, M.wall, ft.id); wb(wall, ru0, ru1, T, back, UP, UP + 0.02, M.ceiling, ft.id);
+      if (full) { wb(wall, ru0 - T, ru0, T, back + T, RH, UP, SW, ft.id); wb(wall, ru1, ru1 + T, T, back + T, RH, UP, SW, ft.id);
+        wb(wall, ru0 - T, ru1 + T, 0, T, RH, UP, SW, ft.id); wb(far, ru0 - T, ru1 + T, 0, T, RH, UP, SW, ft.id); wb(wall, ru0, ru1, T, back, UP, UP + 0.02, M.ceiling, ft.id);
         bx(0.9, 0.95, dh0, turn ? back - 0.9 : back, FL2 + 0.88, FL2 + 0.93, M.shelf); }
     }
     if (kind === 'conservatory') wb(wall, cu - 0.45, cu + 0.45, T + rd * 0.55 - 0.45, T + rd * 0.55 + 0.45, 0, 0.72, M.shelf, ft.id);
@@ -655,10 +675,13 @@ export function buildRoom(spec, opts = {}) {
       // the outside view itself is the photo sphere (outsideSphere); here only the dressing
       const dressing = ft.dressing || { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[runDown(spec) ? 'neglected' : spec.style] || 'none';
       if (dressing === 'frosted') wb(wall, u0, u1, T * 0.69, T * 0.73, s, s + h, M.frosted, ft.id);
-      if (dressing === 'blinds') {
-        const stack = s + h - h * 0.33;
-        wb(wall, u0, u1, T * 0.3, T * 0.4, stack, s + h, M.blind, ft.id);
-        for (let z = stack - 0.05; z > s + 0.03; z -= 0.09) wb(wall, u0 + 0.01, u1 - 0.01, T * 0.3, T * 0.4, z, z + 0.012, M.blind, ft.id);
+      if (dressing === 'blinds') {                              // as generate.py venetian(): headrail, thin drawn-up stack, slats let down
+        const top = s + h, head = top - 0.045, run = head - (s + 0.02), drop = Math.max(0.15, Math.min(1, +(ft.blind_drop ?? 0.8)));
+        const bottom = head - run * drop, stack = Math.max(0.006, (run * (1 - drop) / 0.022) * 0.003), dc = T * 0.35;
+        wb(wall, u0 + 0.004, u1 - 0.004, dc - 0.024, dc + 0.024, head, top - 0.008, M.blind, ft.id);
+        wb(wall, u0 + 0.008, u1 - 0.008, dc - 0.0125, dc + 0.0125, head - stack, head, M.blind, ft.id);
+        for (let z = head - stack - 0.03; z > bottom + 0.01; z -= 0.03) wb(wall, u0 + 0.008, u1 - 0.008, dc - 0.01, dc + 0.01, z, z + 0.005, M.blind, ft.id);
+        wb(wall, u0 + 0.008, u1 - 0.008, dc - 0.0125, dc + 0.0125, bottom - 0.006, bottom + 0.006, M.blind, ft.id);
       }
       if (dressing === 'curtains' || dressing === 'nets_curtains') {
         wb(wall, u0 - 0.38, u0 + 0.06, -0.12, -0.08, 0.02, Math.min(RH - 0.03, s + h + 0.15), M.curtain, ft.id);

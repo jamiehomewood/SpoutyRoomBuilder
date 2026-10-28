@@ -636,7 +636,7 @@ RNG = random.Random(f"{SPEC.get('name', 'room')}|{CONDITION}")          # the sa
 _aged, _orig = {}, {}
 
 def age_object_mat(m, level, kind="model"):
-    """A copy of material m aged to 'level' (0..1). kind: model, kfront (kitchen doors), appliance, steel, worktop."""
+    """A copy of material m aged to 'level' (0..1). kind: model, kfront (kitchen doors), door (room doors), appliance, steel, worktop."""
     if not m or level <= 0.01 or not m.use_nodes: return m
     key = (m.name, round(level, 2), kind)
     if key in _aged: return _aged[key]
@@ -663,6 +663,10 @@ def age_object_mat(m, level, kind="model"):
     nt.links.new(col, hs.inputs["Color"]); col = hs.outputs[0]
     if kind in ("kfront", "appliance", "worktop"):           # cooking grease and nicotine: yellow-brown film
         col = _mix(nt, 0.45 * level, col, (0.82, 0.68, 0.42), "MULTIPLY")
+    if kind == "door":                                       # gloss paint yellows; shoes scuff the bottom 30 cm
+        col = _mix(nt, 0.3 * level, col, (0.9, 0.8, 0.58), "MULTIPLY")
+        kick = _math(nt, "MULTIPLY", _maprange(nt, z, 0.32, 0.04), _maprange(nt, noise(14.0, 3.0, 0.6), 0.45, 0.62))
+        col = _mix(nt, _math(nt, "MULTIPLY", kick, 0.9 * level), col, (0.3, 0.26, 0.21), "MULTIPLY")
     grime = _math(nt, "MULTIPLY", _maprange(nt, noise(2.2), 0.3, 0.75), 0.95 * level)
     col = _mix(nt, grime, col, (0.4, 0.33, 0.24), "MULTIPLY")
     # stains: darker blotches (spills, damp, nicotine)
@@ -679,8 +683,9 @@ def age_object_mat(m, level, kind="model"):
     col = _mix(nt, dust, col, (0.5, 0.47, 0.42))
     # chips (doors, appliances) and rust (metal, bottoms of appliances)
     chip = None
-    if kind in ("kfront", "appliance", "worktop") and level > 0.3:
-        n = noise(5.0, 2.0, 0.5); t0 = 0.8 - 0.08 * level        # a few larger, ragged chips rather than a speckle
+    if kind in ("kfront", "appliance", "worktop", "door") and level > 0.3:
+        n = noise(5.0, 2.0, 0.5); t0 = (0.8 - 0.08 * level) if kind != "door" else (0.78 - 0.12 * level)   # doors: chips grow into peeling
+        
         chip = _maprange(nt, n, t0, t0 + 0.008)
         col = _mix(nt, chip, col, (0.5, 0.39, 0.25) if kind != "appliance" else (0.3, 0.13, 0.05))
     rust = None
@@ -1009,6 +1014,22 @@ def opening_cutter(wall, f, z0, z1, round_top=None):
 
 # ============================================================== shell
 log("building shell", W, D, RH, STYLE)
+# Corners: a full-height alcove or kitchenette that stops just short of a corner would leave a thin strip of the old wall
+# standing there like a pillar. Within CORNER_SNAP of the corner (and nothing else in that strip) it is carried on to the
+# corner; where two then meet, corner_mate() opens the corner right up. "keep_gap": true on a feature keeps the strip.
+# The builder's preview (scene.js snapToCorners) does the same, so the spec itself is left as drawn.
+CORNER_SNAP = 0.75
+def _snap_corners():
+    for f in FEATURES:
+        if f.get("type") not in ("alcove", "kitchenette") or f.get("keep_gap") or f.get("wall") not in WALLS: continue
+        if min(float(f.get("height", RH)), RH) < RH - 0.01: continue
+        w = WALLS[f["wall"]]; u0, u1 = float(f["pos"]) - float(f["width"]) / 2, float(f["pos"]) + float(f["width"]) / 2
+        others = [g for g in FEATURES if g is not f and g.get("wall") == f["wall"]]
+        def clear(a, b): return not any(float(g["pos"]) - float(g["width"]) / 2 < b and float(g["pos"]) + float(g["width"]) / 2 > a for g in others)
+        if 0.001 < u0 - w["lo"] < CORNER_SNAP and clear(w["lo"], u0): u0 = w["lo"]
+        if 0.001 < w["hi"] - u1 < CORNER_SNAP and clear(u1, w["hi"]): u1 = w["hi"]
+        f["pos"], f["width"] = (u0 + u1) / 2, u1 - u0
+_snap_corners()
 by_wall = {k: [f for f in FEATURES if f.get("wall") == k] for k in WALLS}
 zones = []                                           # floor/ceiling rectangles: (name, mn, mx, floor_m, ceiling_z)
 if not OUTDOOR:
@@ -1273,7 +1294,7 @@ def window(ft, wall):
         glass = bpy.data.objects.get(f"{fid}_glass")
         if glass: glass.data.materials[0] = MAT["frosted"]
     if dressing == "blinds":
-        venetian(fid, wall, u0, u1, sill, top)
+        venetian(fid, wall, u0, u1, sill, top, ft.get("blind_drop"))
     if dressing in ("curtains", "nets_curtains"):
         rail_z = min(RH - 0.03, top + 0.15)
         wbox(f"{fid}_curtain_rail", wall, u0 - 0.4, u1 + 0.4, -0.12, -0.1, rail_z, rail_z + 0.025, MAT["steel"] if not NEGLECT else MAT["shelf"])
@@ -1294,27 +1315,66 @@ def window(ft, wall):
         except Exception: pass
         put(p)
 
-def venetian(fid, wall, u0, u1, sill, top):
-    """Venetian blind in the reveal: drawn up a third, the rest of the slats tilted open."""
+def venetian(fid, wall, u0, u1, sill, top, drop=None):
+    """Venetian blind in the window reveal, as a real one hangs: headrail at the top of the reveal, the drawn-up slats
+    packed into a thin stack under it (about 3 mm a slat), the rest let down with the slats tilted open, ladder tapes,
+    a bottom rail and a tilt wand. drop = how far it is let down (0..1, default 0.8). Condition shows: yellowing,
+    uneven tilt and bent slats (worn), a few missing slats and a bottom rail hanging lower at one end (derelict)."""
+    d_c, half, pitch_ = T * 0.35, 0.0125, 0.022                  # slat centre in the reveal, half a 25 mm slat, slat spacing
+    drop = max(0.15, min(1.0, float(drop if drop is not None else 0.8)))
+    m = age_object_mat(MAT["blind"], DMG * 0.9, "model") if DMG > 0.01 else MAT["blind"]
+    a, b = u0 + 0.008, u1 - 0.008                                 # slats stop just short of the reveal
+    head_z0 = top - 0.045
+    wbox(f"{fid}_blind_head", wall, a - 0.004, b + 0.004, d_c - 0.024, d_c + 0.024, head_z0, top - 0.008, m)   # headrail
+    for k, uu in enumerate((a - 0.004, b - 0.002)):                                                    # end caps
+        wbox(f"{fid}_blind_cap{k}", wall, uu, uu + 0.006, d_c - 0.026, d_c + 0.026, head_z0 - 0.002, top - 0.006, m)
+    span_h = head_z0 - (sill + 0.02)                              # how far the blind can come down
+    bottom = head_z0 - span_h * drop                              # bottom rail height (middle)
+    n_total = int(span_h / pitch_)
+    n_down = int((head_z0 - bottom) / pitch_)
+    stack_h = max(0.006, (n_total - n_down) * 0.003)              # the drawn-up slats, packed flat
+    stack_z1 = head_z0 - 0.002
+    if n_total - n_down > 0:
+        wbox(f"{fid}_blind_stack", wall, a, b, d_c - half, d_c + half, stack_z1 - stack_h, stack_z1, m)
+    sag = 0.05 * (DMG - 0.8) / 0.2 if DMG > 0.8 else 0.0          # derelict: the bottom hangs lower at one end
     me = bpy.data.meshes.new(f"{fid}_blind"); bm = bmesh.new()
-    d_c, half, ang = T * 0.35, 0.0125, math.radians(40)
-    stack_z = top - (top - sill) * 0.33
-    z = stack_z - 0.05
-    slats = []
-    while z > sill + 0.03:
-        slats.append((z, ang)); z -= 0.045
-    zz = top - 0.06
-    while zz > stack_z:                               # the drawn-up stack: slats flat and close together
-        slats.append((zz, 0.0)); zz -= 0.008
-    for z_, a_ in slats:
-        dd, dz = half * math.cos(a_), half * math.sin(a_)
-        q = [w2world(wall, u0 + 0.01, d_c - dd, z_ - dz), w2world(wall, u1 - 0.01, d_c - dd, z_ - dz),
-             w2world(wall, u1 - 0.01, d_c + dd, z_ + dz), w2world(wall, u0 + 0.01, d_c + dd, z_ + dz)]
-        bm.faces.new([bm.verts.new(v) for v in q])
-    bm.to_mesh(me); bm.free(); me.materials.append(MAT["blind"])
+    ang0 = math.radians(40)
+    z = stack_z1 - stack_h - pitch_
+    k = 0
+    while z > bottom + pitch_ * 0.6:
+        k += 1
+        if DMG > 0.5 and RNG.random() < (DMG - 0.5) * 0.12:      # a missing slat
+            z -= pitch_; continue
+        ang = ang0 + math.radians(RNG.uniform(-12, 12) * DMG)
+        bend = (RNG.random() < DMG * 0.08) * RNG.uniform(0.01, 0.025)   # a bent slat: drops in the middle
+        dd, dz = half * math.cos(ang), half * math.sin(ang)
+        cols = []
+        for t in (0.0, 0.5, 1.0):                                 # three points along: lets a slat bend or follow the sag
+            uu = a + (b - a) * t
+            zz = z - sag * t * max(0.0, (stack_z1 - z) / max(0.01, stack_z1 - bottom)) - (bend if t == 0.5 else 0.0)
+            cols.append((w2world(wall, uu, d_c - dd, zz - dz), w2world(wall, uu, d_c + dd, zz + dz)))
+        vs = [(bm.verts.new(p0), bm.verts.new(p1)) for p0, p1 in cols]
+        for i in range(2):
+            bm.faces.new([vs[i][0], vs[i + 1][0], vs[i + 1][1], vs[i][1]])
+        z -= pitch_
+    bm.to_mesh(me); bm.free(); me.materials.append(m)
     o = bpy.data.objects.new(f"{fid}_blind", me); coll("Room").objects.link(o)
-    wbox(f"{fid}_blind_head", wall, u0, u1, d_c - 0.025, d_c + 0.025, top - 0.05, top - 0.005, MAT["blind"])
-    wbox(f"{fid}_blind_bar", wall, u0 + 0.01, u1 - 0.01, d_c - 0.012, d_c + 0.012, sill + 0.02, sill + 0.035, MAT["blind"])
+    o.modifiers.new("thick", "SOLIDIFY").thickness = 0.0006
+    # bottom rail (tilted when it sags), ladder tapes front and back, tilt wand
+    rail = box_obj(f"{fid}_blind_bar", Vector((0, -half, -0.006)), Vector((b - a, half, 0.006)), m)
+    p0 = w2world(wall, a, d_c, bottom); p1 = w2world(wall, b, d_c, bottom - sag)
+    along = (p1 - p0); L = along.length
+    if L > 1e-4:
+        rot = Vector((1, 0, 0)).rotation_difference(along.normalized()).to_matrix().to_4x4()
+        rail.matrix_world = Matrix.Translation(p0) @ rot
+    n_tapes = max(2, round((b - a) / 0.55) + 1)
+    for t_ in range(n_tapes):
+        uu = a + 0.06 + (b - a - 0.12) * t_ / (n_tapes - 1)
+        zb = bottom - sag * (uu - a) / max(0.01, b - a)
+        for sd in (-1, 1):
+            wbox(f"{fid}_blind_tape{t_}_{sd}", wall, uu - 0.004, uu + 0.004, d_c + sd * (half + 0.0008), d_c + sd * (half + 0.0016), zb, stack_z1 - stack_h, m)
+    wl = min(0.75, top - sill - 0.1)                              # tilt wand hanging from the headrail (cylinders are centred)
+    cylinder_obj(f"{fid}_blind_wand", 0.003, wl, w2world(wall, b - 0.03, d_c - half - 0.012, head_z0 - wl / 2), m, verts=8)
 
 def curtain(name, wall, u0, u1, d0, z0, z1, folds=7, m=None, amp=0.035):
     """A wavy curtain panel hanging from z1 down to the floor."""
@@ -1427,6 +1487,83 @@ def corridor(ft, wall, u0, u1, h, fid, lit=True):
                                 flat("Hall_shade", (0.85, 0.8, 0.7), 0.6, emit=(1.0, 0.85, 0.65), strength=1.5), verts=24)
             cylinder_obj(f"{fid}_hall_flex{k}", 0.004, 0.23, w2world(wall, a + (k + 0.5) * step, T + cw / 2, RH - 0.115), MAT["steel"], verts=8)
 
+def door_style(ft):
+    """Leaf style: the door's own "leaf" (panel / glazed / flush), else by room type."""
+    st = ft.get("leaf")
+    if st in ("panel", "glazed", "flush"): return st
+    return "flush" if (HOSPITAL or COURT) else "panel"
+
+def leaf_parts(w, h, style):
+    """A door leaf as boxes in leaf space: s across it (0 = the free edge with the handle, w = the hinge edge),
+    t through it (0 = the room face, TH = the far face), z up from the bottom of the leaf. Condition decides the
+    hardware and damage: derelict loses the room-side lever and has a lower panel boarded over."""
+    TH = 0.044; P = []
+    add = lambda nm, s0, s1, t0, t1, z0, z1, mk: P.append((nm, s0, s1, t0, t1, z0, z1, mk))
+    if style == "flush":
+        add("core", 0, w, 0, TH, 0, h, "paint")
+    else:
+        st, rt, rb, rl, zl = 0.11, 0.12, 0.22, 0.2, 0.95            # stiles, top rail, bottom rail, lock rail (height, bottom)
+        mu = (w / 2 - 0.05, w / 2 + 0.05)                              # muntin down the middle
+        hi_z = zl + rl                                                 # where the upper panels start
+        PD = 0.011                                                     # how far the panels sit back from the frame
+        add("core_lo", 0.004, w - 0.004, PD, TH - PD, 0, hi_z, "paint")
+        if style == "glazed":                                          # glass in the two upper panels
+            for k, (a_, b_) in enumerate(((st, mu[0]), (mu[1], w - st))):
+                add(f"glass{k}", a_, b_, TH / 2 - 0.003, TH / 2 + 0.003, hi_z, h - rt, "glass")
+            for nm, (a_, b_) in (("core_l", (0.004, st)), ("core_m", mu), ("core_r", (w - st, w - 0.004))):
+                add(nm, a_, b_, PD, TH - PD, hi_z, h, "paint")
+            add("core_t", st, w - st, PD, TH - PD, h - rt, h, "paint")
+        else:
+            add("core_hi", 0.004, w - 0.004, PD, TH - PD, hi_z, h, "paint")
+        for face, (t0, t1) in (("in", (0.0, PD)), ("out", (TH - PD, TH))):
+            add(f"stile_l_{face}", 0, st, t0, t1, 0, h, "paint"); add(f"stile_r_{face}", w - st, w, t0, t1, 0, h, "paint")
+            add(f"rail_t_{face}", st, w - st, t0, t1, h - rt, h, "paint"); add(f"rail_b_{face}", st, w - st, t0, t1, 0, rb, "paint")
+            add(f"rail_m_{face}", st, w - st, t0, t1, zl, zl + rl, "paint")
+            add(f"muntin_lo_{face}", *mu, t0, t1, rb, zl, "paint"); add(f"muntin_hi_{face}", *mu, t0, t1, hi_z, h - rt, "paint")
+        if DMG > 0.85:                                                 # derelict: a kicked-in lower panel, boarded over
+            add("board", st - 0.03, mu[0] + 0.03, -0.012, 0.0, rb - 0.03, zl + 0.03, "board")
+    if HOSPITAL and style == "flush":                                  # vision panel, kick plates both sides, push plate
+        add("vision", w * 0.38, w * 0.62, TH / 2 - 0.004, TH / 2 + 0.004, 1.2, 1.75, "vision")
+        for face, (t0, t1) in (("in", (-0.0015, 0.0)), ("out", (TH, TH + 0.0015))):
+            add(f"kick_{face}", 0.02, w - 0.02, t0, t1, 0.02, 0.3, "steel")
+        add("push", 0.03, 0.13, -0.0015, 0.0, 1.1, 1.4, "steel")
+    elif COURT and style == "flush":
+        add("vision", w * 0.4, w * 0.6, TH / 2 - 0.004, TH / 2 + 0.004, 1.3, 1.8, "vision")
+    for k, hz in enumerate((0.2, h / 2, h - 0.25)):                    # hinge knuckles on the hinge edge
+        add(f"hinge{k}", w - 0.002, w + 0.008, TH / 2 - 0.007, TH / 2 + 0.007, hz, hz + 0.1, "steel")
+    hz, hs = 1.0, 0.065                                                # lever handles on roses, both faces
+    for face, sg, t_face in (("in", -1, 0.0), ("out", 1, TH)):
+        add(f"rose_{face}", hs - 0.026, hs + 0.026, *sorted((t_face, t_face + sg * 0.01)), hz - 0.026, hz + 0.026, "steel")
+        if face == "in" and DMG > 0.85: continue                       # derelict: the room-side lever has gone
+        add(f"lever_neck_{face}", hs - 0.007, hs + 0.007, *sorted((t_face + sg * 0.01, t_face + sg * 0.045)), hz - 0.008, hz + 0.008, "steel")
+        add(f"lever_{face}", hs - 0.007, hs + 0.13, *sorted((t_face + sg * 0.033, t_face + sg * 0.05)), hz - 0.009, hz + 0.009, "steel")
+        if not (HOSPITAL or COURT):                                    # keyhole escutcheon under the handle
+            add(f"keyhole_{face}", hs - 0.012, hs + 0.012, *sorted((t_face, t_face + sg * 0.004)), hz - 0.14, hz - 0.1, "steel")
+    return P
+
+def leaf_mats():
+    k = ("door_mats", round(DMG, 2))
+    if k not in _side_mats:
+        paint = age_object_mat(MAT["door"], DMG, "door") if DMG > 0.01 else MAT["door"]
+        steel = age_object_mat(MAT["steel"], DMG, "steel") if DMG > 0.01 else MAT["steel"]
+        board = flat("Boarded_ply", (0.5, 0.39, 0.26), 0.85)
+        _side_mats[k] = {"paint": paint, "steel": steel, "glass": MAT["glass"], "vision": MAT.get("vision", MAT["glass"]),
+                         "board": age_object_mat(board, DMG * 0.6, "model") if DMG > 0.01 else board}
+    return _side_mats[k]
+
+def leaf_closed(fid, wall, u0, u1, d_room, h, style):
+    """A closed leaf in the opening: hinged at u1, handle at u0, room face at depth d_room."""
+    M = leaf_mats(); w = u1 - u0 - 0.006
+    for nm, s0, s1, t0, t1, z0, z1, mk in leaf_parts(w, h - 0.015, style):
+        wbox(f"{fid}_leaf_{nm}", wall, u0 + 0.003 + s0, u0 + 0.003 + s1, d_room + t0, d_room + t1, 0.01 + z0, 0.01 + z1, M[mk])
+
+def leaf_open(fid, w, h, matrix, style):
+    """A leaf swung open: leaf space mapped to local x = s - w (hinge at the origin), y = -t, then placed by matrix."""
+    M = leaf_mats()
+    for nm, s0, s1, t0, t1, z0, z1, mk in leaf_parts(w, h, style):
+        o = box_obj(f"{fid}_leaf_{nm}", Vector((s0 - w, -t1, z0)), Vector((s1 - w, -t0, z1)), M[mk])
+        o.matrix_world = matrix
+
 def door(ft, wall):
     u0, u1 = feature_span(ft); h = float(ft.get("height", 2.0)); fid = ft.get("id", "door")
     beyond = ft.get("beyond", "hall")
@@ -1447,15 +1584,10 @@ def door(ft, wall):
         # the leaf swung open: hinged at the u1 end on the far side, free end swung out beyond the wall
         leaf_w = u1 - u0
         hinge = w2world(wall, u1, T, 0)
-        leaf = box_obj(f"{fid}_leaf", Vector((-leaf_w, -0.04, 0)), Vector((0, 0.0, h - 0.01)), MAT["door"])
-        ang = math.radians(78)
+        ang = math.radians(78 if DMG < 0.85 else 96)                 # derelict: flung right back
         closed = {"north": 0.0, "south": 0.0, "east": math.pi / 2, "west": math.pi / 2}[wbase(wall)]   # local -x runs towards u0
         swing = {"north": -ang, "south": ang, "east": ang, "west": -ang}[wbase(wall)]                 # free end moves outward
-        leaf.matrix_world = Matrix.Translation(hinge) @ Matrix.Rotation(closed + swing, 4, "Z")
-        if HOSPITAL:                               # vision panel in the leaf
-            bpy.context.view_layer.update()
-            vp = box_obj(f"{fid}_leaf_vision", Vector((-leaf_w * 0.62, -0.045, 1.2)), Vector((-leaf_w * 0.38, 0.005, 1.75)), MAT["vision"])
-            vp.matrix_world = leaf.matrix_world.copy()
+        leaf_open(fid, leaf_w, h - 0.01, Matrix.Translation(hinge) @ Matrix.Rotation(closed + swing, 4, "Z"), door_style(ft))
     elif CUSTODY:                                  # cell door: flush steel, wicket hatch, viewing slot, heavy frame
         fr = flat("Cell_frame", (0.42, 0.45, 0.48), 0.35, 0.5)
         for nm, (a_, b_, z0, z1) in {"l": (u0 - 0.08, u0, 0, h + 0.08), "r": (u1, u1 + 0.08, 0, h + 0.08), "t": (u0 - 0.08, u1 + 0.08, h, h + 0.08)}.items():
@@ -1471,10 +1603,7 @@ def door(ft, wall):
         wbox(f"{fid}_lock_plate", wall, u1 - 0.2, u1 - 0.06, T * 0.2 - 0.008, T * 0.2, 0.9, 1.2, MAT["steel"])
         wbox(f"{fid}_kick", wall, u0 + 0.02, u1 - 0.02, T * 0.2 - 0.006, T * 0.2, 0.02, 0.3, MAT["steel"])
     else:                                          # closed door in the opening
-        c0 = w2world(wall, u0, T * 0.4, 0)
-        wbox(f"{fid}_leaf", wall, u0 + 0.003, u1 - 0.003, T * 0.35, T * 0.35 + 0.04, 0.01, h - 0.005, MAT["door"])
-        k = w2world(wall, u0 + 0.08, T * 0.35 - 0.03, 1.0)
-        cylinder_obj(f"{fid}_handle", 0.02, 0.06, k, MAT["steel"], rot=(math.pi / 2, 0, 0) if WALLS[wall]["axis"] == "x" else (0, math.pi / 2, 0))
+        leaf_closed(fid, wall, u0, u1, T * 0.35, h, door_style(ft))
 
 ROOM_TYPES = {"room": (3.0, 3.0), "toilet": (1.3, 1.8), "bathroom": (2.4, 2.1), "cupboard": (1.0, 0.8), "conservatory": (3.4, 3.0), "hallway": (2.0, 4.0), "porch": (1.8, 1.4)}
 STYLE_SIZES = {("toilet", "accessible"): (1.7, 2.2), ("bathroom", "wetroom"): (2.4, 2.4), ("hallway", "turning"): (2.8, 4.0)}
@@ -1521,7 +1650,8 @@ def side_room(ft, wall, u0, u1, fid):
         if sg > 0: sh = max(0.0, lim - ru0); ru0 += sh; ru1 += sh
         else: sh = max(0.0, ru1 - lim); ru0 -= sh; ru1 -= sh
     back = T + rd
-    wm = MAT["wall"]
+    ov = rm.get("finish")                              # its own walls (paint, paper, tiles...), else the main room's
+    wm = finish_set(f"Side_{fid}", ov.get("walls") or FIN.get("walls", {}), None)[0] if _has(ov) else MAT["wall"]
     bw = lambda nm, a, b, d0, d1, z0, z1, m: wbox(f"{fid}_{nm}", wall, a, b, d0, d1, z0, z1, m)
     glazed = kind in ("conservatory", "porch")
     zd = 0.6 if kind == "conservatory" else 0.95              # dwarf wall height under the glazing

@@ -1,7 +1,7 @@
 // Room Builder - the builder page.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildRoom, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId, runDown, finishColour, setDecalCatalogue, decalPlacement } from './scene.js';
+import { buildRoom, CORNER_SNAP, makeItem, applyItem, footprint, lightRoom, roomFrame, b2t, span, FACING, T, outsideSphere, outsideHdriId, runDown, finishColour, setDecalCatalogue, decalPlacement } from './scene.js';
 
 // ================================================================== state
 // append() that skips null/false, so panels can include optional parts inline
@@ -850,6 +850,9 @@ function beyondEditor(d, key, commit, fld) {
     el('p', { class: 'note' }, { corridor: spec.style === 'hospital' ? 'A ward corridor runs along the wall: handrails, panel lights, double doors and a noticeboard opposite.' : 'A hallway runs along the wall: a door to another room, a radiator and picture, and the front door at one end.',
       room: 'A lit room you can see into, decorated like this one. Put models in it in Plan view (they sit beyond the real wall, so nothing lands on the projected floor).',
       outside: 'Opens straight onto the outside view.', dark: 'An unlit corridor.', closed: 'The door is shut.' }[by])];
+  if (spec.style !== 'custody') out.push(row('Door', radio(key + 'lf', [['auto', 'Auto'], ['panel', 'Panelled'], ['glazed', 'Half-glazed'], ['flush', 'Flush']], d.leaf || 'auto',
+    v => { if (v === 'auto') delete d.leaf; else d.leaf = v; commit(); })),
+    el('p', { class: 'note' }, 'Auto: panelled in homes, flush with a vision panel in hospitals and courts. Its paint, handles and damage follow the room\'s condition.'));
   if (by === 'room') {
     d.room ||= { width: 3, depth: 3, window: true };
     const RT = { room: ['Room', 3, 3], toilet: ['Toilet', 1.3, 1.8], bathroom: ['Bathroom', 2.4, 2.1], cupboard: ['Cupboard', 1.0, 0.8], conservatory: ['Conservatory', 3.4, 3.0], hallway: ['Hallway', 2.0, 4.0], porch: ['Porch', 1.8, 1.4] };
@@ -870,6 +873,13 @@ function beyondEditor(d, key, commit, fld) {
       el('div', { class: 'row chks' },
         ['room', 'toilet', 'bathroom'].includes(kind) ? el('label', {}, el('input', { type: 'checkbox', checked: !!d.room.window, onchange: e => { d.room.window = e.target.checked; commit(); } }), ' Window on its far wall') : null,
         el('label', {}, el('input', { type: 'checkbox', checked: d.room.lit !== false, onchange: e => { d.room.lit = e.target.checked; commit(); } }), ' Light on')));
+    // its walls: the same as this room, or its own finish (tiled rooms keep their tiles; this sets the painted / papered walls)
+    const own = !!d.room.finish?.walls;
+    out.push(row('Walls', el('select', { class: 'grow', onchange: e => {
+      if (e.target.value === 'own') d.room.finish = { walls: clone(spec.wall_finishes?.[d.wall]?.walls || spec.finishes?.walls || { type: 'paint', colour: '#e8e2d6' }) };
+      else delete d.room.finish;
+      commit(); } }, el('option', { value: 'same', selected: !own }, 'Same as this room'), el('option', { value: 'own', selected: own }, 'Their own finish'))));
+    if (own) out.push(finishEditor('walls', d.room.finish.walls, commit));
   }
   return out;
 }
@@ -946,6 +956,15 @@ function tabWalls(body) {
             : row('From left corner', ...slider(r2(leftDist(f)), 0, L, 0.05, v => { setLeftDist(f, v); live(); }, v => { setLeftDist(f, v); commit(); })),
         fld('Width', 'width', 0.4, Math.max(0.5, L)),
       );
+      if (f.type === 'alcove' || f.type === 'kitchenette') {     // near a corner it carries on to the corner (scene.js snapToCorners)
+        const fw = roomFrame(spec).walls[f.wall], gaps = [+f.pos - +f.width / 2 - fw.lo, fw.hi - (+f.pos + +f.width / 2)];
+        if (gaps.some(g => g > 0.001 && g < CORNER_SNAP) || f.keep_gap) card.append(
+          el('p', { class: 'note' }, f.keep_gap ? 'The narrow strip of wall to the corner is kept.'
+            : `Less than ${CORNER_SNAP * 100} cm from a corner, so it carries on into the corner: no thin strip of the old wall is left standing like a pillar.`),
+          el('label', { class: 'note', style: 'display:flex;gap:6px;align-items:center;cursor:pointer' },
+            el('input', { type: 'checkbox', checked: !!f.keep_gap, onchange: e => { if (e.target.checked) f.keep_gap = true; else delete f.keep_gap; commit(); } }),
+            'Keep the narrow gap to the corner'));
+      }
       if (f.type === 'alcove') {
         card.append(fld('Depth', 'depth', 0.2, 6.0));
         card.append(overrideEditor(f, 'finish', () => {
@@ -991,6 +1010,8 @@ function tabWalls(body) {
         card.append(fld('Sill height', 'sill', 0.2, spec.room.height - 0.6), fld('Height', 'height', 0.4, spec.room.height - 0.3));
         const dflt = { neglected: 'nets_curtains', hospital: 'blinds', court: 'blinds', custody: 'frosted' }[suitKey(spec)] || 'none';
         card.append(row('Dressing', radio(f.id + 'o', [['none', 'None'], ['blinds', 'Blinds'], ['curtains', 'Curtains'], ['nets_curtains', 'Nets + curtains'], ['frosted', 'Frosted']], f.dressing || dflt, v => { f.dressing = v; commit(); })));
+        if ((f.dressing || dflt) === 'blinds') card.append(row('Blind let down', ...slider(Math.round(+(f.blind_drop ?? 0.8) * 100), 15, 100, 5,
+          v => { f.blind_drop = v / 100; live(); }, v => { f.blind_drop = v / 100; commit(); }, x => `${Math.round(x)}%`)));
       }
       if (f.type === 'arch') {
         f.room ||= { type: 'kitchen', depth: 2.2 };
@@ -1255,6 +1276,7 @@ function tabViews(body) {
       el('div', { class: 'head' }, el('input', { type: 'text', value: v.name, class: 'grow', onchange: e => { v.name = e.target.value.replace(/[^\w\-]/g, '') || `view${i + 1}`; changed({ structural: true, rebuild: false }); } }),
         el('button', { onclick: () => { eye.view = i; setCamMode('eye'); } }, 'Look'),
         i > 0 ? el('button', { class: 'danger', onclick: () => { spec.views.splice(i, 1); sel = null; changed({ structural: true, rebuild: false }); } }, '✕') : null),
+      Math.round(+v.yaw || 0) % 180 !== 0 ? el('p', { class: 'note bad' }, 'In the room the middle of this picture lands on the Front wall, so facing this way turns the room and its walls won\'t match the real ones. Use Front (0°) unless you mean it.') : null,
       row('Faces', ...slider(+v.yaw || 0, -180, 180, 5, val => { v.yaw = val; drawOverlay(); }, val => { v.yaw = val; changed({ rebuild: false }); }, x => {
         const d = ((+x % 360) + 360) % 360; return ['Front', 'Front-right', 'Right', 'Back-right', 'Back', 'Back-left', 'Left', 'Front-left'][Math.round(d / 45) % 8] + ` ${Math.round(+x)}°`; })),
       mode === 'advanced' ? row('Position', el('span', { class: 'note' }, 'x'), numIn(v.x, 0.05, val => { v.x = val; changed({ rebuild: false, structural: true }); }), el('span', { class: 'note' }, 'y'), numIn(v.y, 0.05, val => { v.y = val; changed({ rebuild: false, structural: true }); })) : null,
@@ -1358,6 +1380,8 @@ function tabLibrary(body) {
           el('a', { href: `${base}/credits.md`, target: '_blank' }, el('button', {}, 'Credits')),
           el('button', { onclick: () => openCopy(m) }, 'Open as copy'),
           el('button', { onclick: () => fileLinks(m) }, 'Files…'),
+          el('button', { onclick: () => turnDialog(m), title: 'Turn a view that lands 90° out in the room (no re-render)' },
+            Object.values(m.faces || {}).some(y => Math.round(+y) % 360 !== 0) ? 'Turn… ⚠' : 'Turn…'),
           el('button', { class: 'danger', onclick: async () => { if (!confirm(`Remove "${m.name}" from the library? It moves to library/_removed.`)) return; await api(`/api/library/${m.id}/remove`, {}); renderTab(); } }, 'Remove'))));
     }
   }).catch(e => { box.innerHTML = ''; box.append(el('p', { class: 'note bad' }, e.message)); });
@@ -1365,6 +1389,41 @@ function tabLibrary(body) {
 async function openCopy(m) {
   const s = await (await fetch(`/library/${encodeURIComponent(m.id)}/spec.json`)).json();
   s.name = (s.name || 'Room') + ' (copy)'; loadSpec(s); tab = 'room'; markTabs(); renderTab(); toast('Opened a copy. Change it and render again.');
+}
+// Turning a finished view: in the room the middle of the picture lands on the Front wall, so a view rendered facing
+// Left/Right/Back arrives turned. The server slides the picture round exactly (tools/turn_view.py), keeps the originals in
+// <room>/_unturned, updates the view's Faces and moves the markers of any tour that uses it.
+const facing = x => { const d = ((+x % 360) + 360) % 360; return ['Front', 'Front-right', 'Right', 'Back-right', 'Back', 'Back-left', 'Left', 'Front-left'][Math.round(d / 45) % 8]; };
+function turnDialog(m) {
+  m.faces = m.faces || {};
+  const box = el('div', {});
+  const draw = (msg = {}) => {
+    box.innerHTML = '';
+    box.append(el('h3', {}, `Turn: ${m.name}`),
+      el('p', { class: 'note' }, 'In the room the middle of the picture lands on the Front wall. A view rendered facing Left or Right arrives 90° out, and in a room that isn\'t square its walls won\'t line up with the real ones. Turning slides the picture round exactly: nothing is rendered again, the originals are kept in the room\'s _unturned folder, and markers in tours that use the view move with it.'));
+    for (const v of m.views) {
+      const y = +m.faces[v] || 0, off = Math.round(y) % 360 !== 0;
+      const go = async by => {
+        draw({ [v]: 'Turning… (Blender, a few seconds)' }); box.querySelectorAll('button[data-turn]').forEach(b => { b.disabled = true; });
+        try {
+          const r = await api(`/api/library/${encodeURIComponent(m.id)}/turn`, { view: v, by });
+          m.faces[v] = r.faces;
+          draw({ [v]: `Done: it now faces ${facing(r.faces)}.` + (r.tours.length ? ` Markers moved in: ${r.tours.join(', ')}.` : '') });
+          if (tab === 'library') renderTab();
+        } catch (e) { draw({ [v]: 'Could not turn it: ' + e.message }); }
+      };
+      box.append(el('div', { class: 'card' },
+        el('div', { class: 'head' }, el('b', {}, v), el('span', { class: off ? 'pill warn' : 'pill ok' }, `faces ${facing(y)} ${Math.round(y)}°`)),
+        el('div', { class: 'acts' },
+          off ? el('button', { class: 'primary', 'data-turn': 1, title: 'Put the room\'s Front on the Front wall', onclick: () => go(Math.round(y / 90) * 90) }, 'Face the Front') : null,
+          el('button', { 'data-turn': 1, title: 'What is on the Right wall comes to the Front', onclick: () => go(-90) }, '⟳ Turn right 90°'),
+          el('button', { 'data-turn': 1, title: 'What is on the Left wall comes to the Front', onclick: () => go(90) }, '⟲ Turn left 90°'),
+          el('button', { 'data-turn': 1, onclick: () => go(180) }, '180°')),
+        msg[v] ? el('p', { class: 'note' }, msg[v]) : null));
+    }
+    box.append(el('div', { class: 'acts' }, el('button', { value: 'close' }, 'Close')));
+  };
+  draw(); showDialog(box);
 }
 function fileLinks(m) {
   const base = `${location.origin}/library/${encodeURIComponent(m.id)}`;

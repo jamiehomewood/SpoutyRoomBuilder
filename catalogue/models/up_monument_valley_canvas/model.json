@@ -1,0 +1,38 @@
+{
+  "id": "up_monument_valley_canvas",
+  "name": "Monument Valley canvas print",
+  "file": "model.glb",
+  "thumb": "thumb.png",
+  "category": "decor",
+  "styles": [
+    "modern",
+    "neglected"
+  ],
+  "tags": [
+    "canvas",
+    "picture",
+    "art",
+    "panorama",
+    "monument valley",
+    "landscape",
+    "wall",
+    "uploaded"
+  ],
+  "status": "untested",
+  "notes": "Jamie's own panoramic canvas print, as above the sofa in Glenda's room: 1.85 x 0.5 m, 3.5 cm deep. Stands on its bottom edge: raise it with Height (about 1.2 m to the bottom edge over a sofa) and turn it to face the room.",
+  "scale": 1.0,
+  "polycount": 14,
+  "size": [
+    1.85,
+    0.0355,
+    0.5
+  ],
+  "warnings": [],
+  "licence": {
+    "source": "Jamie's own photo",
+    "author": "Jamie",
+    "licence": "Own photo",
+    "credit_required": false,
+    "credit_line": ""
+  }
+}
