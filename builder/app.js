@@ -759,6 +759,18 @@ function trimEditor(t, onChange) {
     !wood ? row('Finish', el('select', { class: 'grow', onchange: e => { t.sheen = e.target.value; onChange(); } },
              (finCfg.options?.sheen || []).map(([v, l]) => el('option', { value: v, selected: v === (t.sheen || 'gloss') }, l)))) : null);
 }
+// door leaves: a wood veneer or a painted colour (left unset, the room type's own door)
+function doorsEditor(F, onChange) {
+  const D = F.doors; const kind = !D ? 'type' : (D.type === 'paint' ? 'paint' : 'wood');
+  return el('div', { class: 'fin' },
+    row('Doors', el('select', { class: 'grow', onchange: e => { const v = e.target.value;
+      if (v === 'type') delete F.doors; else if (v === 'wood') F.doors = { type: 'wood', wood: 'light_oak' }; else F.doors = { type: 'paint', colour: '#e8e6df' }; onChange(); } },
+      el('option', { value: 'type', selected: kind === 'type' }, 'As the room type'), el('option', { value: 'wood', selected: kind === 'wood' }, 'Wood veneer'),
+      el('option', { value: 'paint', selected: kind === 'paint' }, 'Painted'))),
+    kind === 'wood' ? row('Wood', el('select', { class: 'grow', onchange: e => { D.wood = e.target.value; onChange(); } },
+      (finCfg.options?.wood || []).filter(([v]) => v !== 'painted').map(([v, l]) => el('option', { value: v, selected: v === D.wood }, l)))) : null,
+    kind === 'paint' ? row('Colour', swatches(finCfg.palettes?.paint || [], D.colour, hex => { D.colour = hex; onChange(); }, false, hex => { D.colour = hex; })) : null);
+}
 function kitchenEditor(K, onChange) {
   K.units ||= { style: 'matt', colour: '#eeeeea' }; K.worktop ||= { type: 'quartz_white' }; K.splashback ||= { type: 'tiles', tile_size: 'metro', colour: '#efefeb' };
   K.floor ||= { type: 'same' }; K.appliances ||= 'steel';
@@ -795,7 +807,7 @@ function finishesPanel() {
     el('h4', {}, 'Finishes'),
     el('p', { class: 'note' }, 'What the room is decorated with. A single wall or an alcove can have its own finish: set it on the Walls tab.'),
     finishEditor('walls', F.walls, ch), finishEditor('lower', F.lower, ch), finishEditor('floor', F.floor, ch), finishEditor('ceiling', F.ceiling, ch),
-    trimEditor(F.trim, ch),
+    trimEditor(F.trim, ch), doorsEditor(F, ch),
     el('h4', {}, 'Kitchen'),
     el('p', { class: 'note' }, 'Used by kitchenettes and kitchens through an arch.'),
     kitchenEditor(F.kitchen ||= clone(presetFinishes(spec.style).kitchen || {}), ch),
