@@ -876,6 +876,23 @@ def style_materials():
 
 MAT = style_materials()
 
+def door_and_fitting_materials():
+    """Door leaves from the finishes (wood veneer or paint), then age the fittings with the room's condition."""
+    d = FIN.get("doors") if isinstance(FIN.get("doors"), dict) else None
+    if d is None and HOSPITAL: d = {"type": "wood", "wood": "light_oak"}     # NHS-style light veneer, not a flat peach colour
+    if d:
+        if d.get("type", "wood") == "wood":
+            MAT["door"] = wood_mat("Door_leaf_veneer", {"wood": d.get("wood", "light_oak")}, floor=False, laminate=True)
+        else:
+            MAT["door"] = paint_mat("Door_leaf_paint", d.get("colour", "#e8e6df"), d.get("sheen", "silk"))
+    if DMG > 0.01:                                       # radiators, doors, frames and rails get the same beating as the rest
+        MAT["door"] = age_object_mat(MAT["door"], DMG * 0.9, "kfront")
+        MAT["radiator"] = age_object_mat(MAT["radiator"], DMG, "appliance")
+        for k in ("frame", "handrail", "shelf", "blind", "bedhead"):
+            if k in MAT: MAT[k] = age_object_mat(MAT[k], DMG * 0.7, "model")
+
+door_and_fitting_materials()
+
 # per-wall and per-alcove finishes: {"walls": {...}, "lower": {...}} on spec.wall_finishes[<wall>] or an alcove's "finish";
 # anything left out is inherited (alcove <- its wall <- the room)
 _WF = SPEC.get("wall_finishes") or {}
@@ -1427,6 +1444,57 @@ def corridor(ft, wall, u0, u1, h, fid, lit=True):
                                 flat("Hall_shade", (0.85, 0.8, 0.7), 0.6, emit=(1.0, 0.85, 0.65), strength=1.5), verts=24)
             cylinder_obj(f"{fid}_hall_flex{k}", 0.004, 0.23, w2world(wall, a + (k + 0.5) * step, T + cw / 2, RH - 0.115), MAT["steel"], verts=8)
 
+def _quad(name, P, m):
+    """A box from its 8 corners P (bottom 4 then top 4, same order), with outward normals."""
+    me = bpy.data.meshes.new(name); me.from_pydata([tuple(v) for v in P], [], [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)])
+    bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(me); bm.free()
+    me.materials.append(m); o = bpy.data.objects.new(name, me); coll("Room").objects.link(o); return o
+
+def open_leaf(fid, wall, u0, u1, h, new_since=None):
+    """The door leaf standing open beyond the wall. It opens as far as it can (78 degrees) without passing through
+    anything built behind the door (basin, rail, stairs...): if something is in the way it opens less, or hangs on the
+    other side instead."""
+    O = w2world(wall, 0, 0, 0); eu = (w2world(wall, 1, 0, 0) - O); ed = (w2world(wall, 0, 1, 0) - O)
+    eu.z = ed.z = 0; eu.normalize(); ed.normalize()
+    w = u1 - u0
+    obst = []
+    if new_since is not None:
+        bpy.context.view_layer.update()
+        for o in bpy.data.objects:
+            if o.name in new_since or o.type != "MESH": continue
+            if any(t in o.name for t in ("room_front", "_skirt_", "tiles_", "_ceiling", "_slab", "_up_")): continue
+            cs = [o.matrix_world @ Vector(c) for c in o.bound_box]
+            if max(c.z for c in cs) < 0.03 or min(c.z for c in cs) > h: continue
+            obst.append((min(c.x for c in cs), min(c.y for c in cs), max(c.x for c in cs), max(c.y for c in cs)))
+    def frame(hs, a):
+        H = w2world(wall, u1 if hs > 0 else u0, T, 0); r = math.radians(a)
+        dirv = (-hs * eu) * math.cos(r) + ed * math.sin(r)              # from the hinge to the free edge
+        perp = ed * math.cos(r) + (hs * eu) * math.sin(r)               # across the leaf, towards the wall behind it
+        return H, dirv, perp
+    def hits(hs, a):
+        H, dv, pp = frame(hs, a)
+        poly = [H + dv * x + pp * y for x in (0.0, w + 0.03) for y in (-0.07, 0.03)]
+        axes = [Vector((1, 0, 0)), Vector((0, 1, 0)), dv, pp]
+        n = 0
+        for b in obst:
+            box = [Vector((b[0], b[1], 0)), Vector((b[2], b[1], 0)), Vector((b[2], b[3], 0)), Vector((b[0], b[3], 0))]
+            if all(not (max(p.dot(ax) for p in poly) <= min(q.dot(ax) for q in box) + 1e-4 or
+                        max(q.dot(ax) for q in box) <= min(p.dot(ax) for p in poly) + 1e-4) for ax in axes): n += 1
+        return n
+    choice = None
+    for a in (78, 70, 62, 54, 46, 38):
+        for hs in (1, -1):
+            if hits(hs, a) == 0: choice = (hs, a); break
+        if choice: break
+    if choice is None:
+        choice = min(((hs, a) for a in (38, 30) for hs in (1, -1)), key=lambda c: hits(*c))
+        log("door leaf", fid, "still touches something behind it")
+    H, dv, pp = frame(*choice); up = Vector((0, 0, 1))
+    P = lambda x0, x1, y0, y1, z0, z1: [H + dv * x + pp * y + up * z for z in (z0, z1) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    _quad(f"{fid}_leaf", P(0, w, -0.04, 0, 0, h - 0.01), MAT["door"])
+    if HOSPITAL:                                   # vision panel in the leaf
+        _quad(f"{fid}_leaf_vision", P(w * 0.38, w * 0.62, -0.045, 0.005, 1.2, 1.75), MAT["vision"])
+
 def door(ft, wall):
     u0, u1 = feature_span(ft); h = float(ft.get("height", 2.0)); fid = ft.get("id", "door")
     beyond = ft.get("beyond", "hall")
@@ -1437,6 +1505,7 @@ def door(ft, wall):
     # lining in the reveal
     wbox(f"{fid}_lining_t", wall, u0, u1, 0, T, h - 0.02, h, MAT["trim"])
     if beyond in ("hall", "corridor", "dark", "outside", "room"):
+        before = set(bpy.data.objects.keys())
         if beyond == "room":
             side_room(ft, wall, u0, u1, fid)
         elif beyond != "outside":
@@ -1444,18 +1513,7 @@ def door(ft, wall):
         else:
             OPEN_SIDES.add(wbase(wall))
             wbox(f"{fid}_step", wall, u0 - 0.05, u1 + 0.05, T, T + 0.35, -0.12, -0.005, flat("Doorstep_stone", (0.5, 0.5, 0.48), 0.8))
-        # the leaf swung open: hinged at the u1 end on the far side, free end swung out beyond the wall
-        leaf_w = u1 - u0
-        hinge = w2world(wall, u1, T, 0)
-        leaf = box_obj(f"{fid}_leaf", Vector((-leaf_w, -0.04, 0)), Vector((0, 0.0, h - 0.01)), MAT["door"])
-        ang = math.radians(78)
-        closed = {"north": 0.0, "south": 0.0, "east": math.pi / 2, "west": math.pi / 2}[wbase(wall)]   # local -x runs towards u0
-        swing = {"north": -ang, "south": ang, "east": ang, "west": -ang}[wbase(wall)]                 # free end moves outward
-        leaf.matrix_world = Matrix.Translation(hinge) @ Matrix.Rotation(closed + swing, 4, "Z")
-        if HOSPITAL:                               # vision panel in the leaf
-            bpy.context.view_layer.update()
-            vp = box_obj(f"{fid}_leaf_vision", Vector((-leaf_w * 0.62, -0.045, 1.2)), Vector((-leaf_w * 0.38, 0.005, 1.75)), MAT["vision"])
-            vp.matrix_world = leaf.matrix_world.copy()
+        open_leaf(fid, wall, u0, u1, h, before if beyond == "room" else None)
     elif CUSTODY:                                  # cell door: flush steel, wicket hatch, viewing slot, heavy frame
         fr = flat("Cell_frame", (0.42, 0.45, 0.48), 0.35, 0.5)
         for nm, (a_, b_, z0, z1) in {"l": (u0 - 0.08, u0, 0, h + 0.08), "r": (u1, u1 + 0.08, 0, h + 0.08), "t": (u0 - 0.08, u1 + 0.08, h, h + 0.08)}.items():
@@ -1678,10 +1736,15 @@ def side_room(ft, wall, u0, u1, fid):
         bw("bath_screen_edge", b0 + 0.78, b0 + 0.8, bd + 0.015, bd + 0.035, 0.56, 2.0, S_)
         wc_side("bath_wc", back - 1.15, at_b=True)
         basin_side("bath", T + 0.45, at_b=False)
-        for k in range(6):                                     # chrome towel radiator on the door wall
-            bw(f"bath_towel_bar{k}", ru1 - 0.7, ru1 - 0.2, T + 0.02, T + 0.045, 0.4 + k * 0.2, 0.425 + k * 0.2, S_)
-        for x in (ru1 - 0.7, ru1 - 0.225):
-            bw(f"bath_towel_post{int(x * 100)}", x, x + 0.025, T + 0.02, T + 0.05, 0.3, 1.5, S_)
+        # chrome towel radiator on the door wall, beside the doorway (never across it), on whichever side has room
+        sides = [(u1 + 0.15, ru1 - 0.1), (ru0 + 0.1, u0 - 0.15)]
+        ta, tb = max(sides, key=lambda p: p[1] - p[0])
+        if tb - ta >= 0.35:
+            tw = min(0.5, tb - ta); ta = (ta + tb) / 2 - tw / 2; tb = ta + tw
+            for k in range(6):
+                bw(f"bath_towel_bar{k}", ta, tb, T + 0.02, T + 0.045, 0.4 + k * 0.2, 0.425 + k * 0.2, S_)
+            for k, x in enumerate((ta, tb - 0.025)):
+                bw(f"bath_towel_post{k}", x, x + 0.025, T + 0.02, T + 0.05, 0.3, 1.5, S_)
     elif kind == "toilet":
         tm = side_mat("wc_tiles"); H = 1.2
         bw("wc_tiles_back", ru0, ru1, back - 0.008, back, 0, H, tm)

@@ -285,6 +285,8 @@ function mats(style, spec) {
     // ceiling plaster/artex are painted (not the bare pink plaster wall finish)
     m.ceiling = finishMat(fin.ceiling?.type === 'tiles' ? { type: 'ceiling_tiles' } : { type: 'paint', colour: fin.ceiling?.colour || '#f0eee8' }, cond, m.ceiling);
     m.trim = fin.trim ? finishMat(fin.trim.wood ? { type: 'wood', wood: fin.trim.wood } : { type: 'paint', colour: fin.trim.colour }, cond, m.trim) : m.trim;
+    const D = fin.doors || (spec.style === 'hospital' ? { type: 'wood', wood: 'light_oak' } : null);
+    if (D) m.door = finishMat(D.type === 'paint' ? { type: 'paint', colour: D.colour } : { type: 'wood', wood: D.wood || 'light_oak' }, cond, m.door);
     const K = fin.kitchen;
     if (K) {                                           // kitchen units, worktop, splashback, floor, appliances
       const u = K.units || {};
@@ -541,9 +543,10 @@ export function buildRoom(spec, opts = {}) {
       const hinge = w2(wall, u1, T, 0);
       const leaf = new THREE.Mesh(new THREE.BoxGeometry(lw, h - 0.01, 0.04), M.door);
       leaf.geometry.translate(-lw / 2, (h - 0.01) / 2, 0.02);
-      const closed = { north: 0, south: 0, east: Math.PI / 2, west: Math.PI / 2 }[baseOf(wall)];
-      const swing = { north: -ang, south: ang, east: ang, west: -ang }[baseOf(wall)];
-      leaf.position.copy(b2t(hinge[0], hinge[1], 0)); leaf.rotation.y = closed + swing;
+      // works for any frame, including an alcove's side wall: the free edge goes from the hinge back towards u0, then out
+      const o0 = w2(wall, 0, 0, 0), eu = w2(wall, 1, 0, 0).map((v, i) => v - o0[i]), ed = w2(wall, 0, 1, 0).map((v, i) => v - o0[i]);
+      const dx = -eu[0] * Math.cos(ang) + ed[0] * Math.sin(ang), dy = -eu[1] * Math.cos(ang) + ed[1] * Math.sin(ang);
+      leaf.position.copy(b2t(hinge[0], hinge[1], 0)); leaf.rotation.y = Math.atan2(-dy, -dx);
       add(leaf, ft.id);
     }
   };
